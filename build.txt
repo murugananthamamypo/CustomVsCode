@@ -87,3 +87,21 @@ rm -f /var/folders/3q/vwpjxj355719x_tlkl8s03_w0000gq/T/amypocoder_mac.lock
 	/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister -u /Users/dev/Documents/Amypo/projects/CustomVsCode/.build/electron/AmypoCoder.app
 for production
 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister -u /Users/dev/Documents/Amypo/projects/VSCode-darwin-arm64/AmypoCoder.app
+
+
+
+Window
+# 1. Install dependencies
+npm install
+
+# 2. Compile TypeScript files
+npm run compile
+
+# 3. Build the Windows x64 executable package
+npm run gulp vscode-win32-x64
+
+# User Installer (.exe)
+yarn gulp vscode-win32-x64-user-setup
+
+# System-wide Installer (.exe)
+yarn gulp vscode-win32-x64-system-setup
