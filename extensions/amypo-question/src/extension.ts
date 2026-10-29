@@ -14,11 +14,30 @@ import axios from 'axios';
 import { EduViewProvider, ICourseInfo } from './webview/EduModal';
 import { submitData, jsonsubmitData, fetchData } from './services/axios/submissions';
 import { verifySpringBoot, verifyReact, verifyReactSpring, verifySelenium } from './services/verificationService';
+import { refreshTerminalEnv, getFreshWindowsEnv } from './services/envService';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
+const getApiUrl = (type: string): string => {
+	const t = (type || '').toLowerCase();
+	return (t === 'dev' || t === 'development' || t.startsWith('dev'))
+		? 'https://1102amy21.amypo.ai/api'
+		: 'https://endpoint.amypo.ai/api';
+};
+const getStorageUrl = (type: string): string => {
+	const t = (type || '').toLowerCase();
+	return (t === 'dev' || t === 'development' || t.startsWith('dev'))
+		? 'https://1102amy21.amypo.ai/storage'
+		: 'https://endpoint.amypo.ai/storage';
+};
 let server_type = 'prod';
-let API_URL = server_type === 'dev' ? 'https://1102amy21.amypo.ai/api' : 'https://endpoint.amypo.ai/api';
+let API_URL = getApiUrl(server_type);
+
+const isSuccessResp = (r: any): boolean => {
+	if (!r) { return false; }
+	const status = r.status ?? r.statusCode ?? r.code;
+	return status === 200 || status === '200' || status === 201 || status === '201' || status === true || status === 'success' || r.success === true;
+};
 
 let GITHUB_TOKEN = '';
 let GIT_URL = '';
@@ -169,30 +188,41 @@ async function refreshWindowsPathFromRegistry(): Promise<string | null> {
 		let machinePath = '';
 		let userPath = '';
 
-		// *** KEY FIX: Use execFileAsync, NOT execAsync ***
-		// execAsync (child_process.exec) needs to find cmd.exe via PATH to spawn a shell.
-		// When PATH is stripped (protocol handler launch), cmd.exe can't be found → silent failure.
-		// execFileAsync (child_process.execFile) runs the binary DIRECTLY — no shell needed.
+		// Query Windows Registry directly via execFile (runs reg.exe directly — no shell needed)
 		if (fs.existsSync(regExe)) {
 			const [machineRes, userRes] = await Promise.all([
-				execFileAsync(regExe, ['query', 'HKLM\\System\\CurrentControlSet\\Control\\Session Manager\\Environment', '/v', 'Path']).catch(() => ({ stdout: '' })),
-				execFileAsync(regExe, ['query', 'HKCU\\Environment', '/v', 'Path']).catch(() => ({ stdout: '' }))
+				execFileAsync(regExe, ['query', 'HKLM\\System\\CurrentControlSet\\Control\\Session Manager\\Environment']).catch(() => ({ stdout: '' })),
+				execFileAsync(regExe, ['query', 'HKCU\\Environment']).catch(() => ({ stdout: '' }))
 			]);
 
-			const parseRegPath = (output: string | Buffer) => {
+			const parseEnvBlock = (output: string | Buffer) => {
+				const vars: Record<string, string> = {};
 				const text = typeof output === 'string' ? output : output.toString();
-				if (!text) return '';
-				const lines = text.split('\n');
+				if (!text) return vars;
+				const lines = text.split(/\r?\n/);
 				for (const line of lines) {
-					if (line.includes('REG_EXPAND_SZ') || line.includes('REG_SZ')) {
-						const parts = line.split(/REG_EXPAND_SZ|REG_SZ/);
-						if (parts.length > 1) {
-							return parts[1].trim();
-						}
+					const m = line.match(/^\s+([^\s]+)\s+(?:REG_SZ|REG_EXPAND_SZ)\s*(.*)$/i);
+					if (m) {
+						vars[m[1]] = m[2] ? m[2].trim() : '';
 					}
 				}
-				return '';
+				return vars;
 			};
+
+			const sysVars = parseEnvBlock(machineRes.stdout);
+			const usrVars = parseEnvBlock(userRes.stdout);
+
+			// Populate any missing tool HOME variables (JAVA_HOME, MAVEN_HOME, PYTHON_HOME, etc.)
+			for (const [k, v] of Object.entries(sysVars)) {
+				if (k.toLowerCase() !== 'path' && !process.env[k]) {
+					process.env[k] = v;
+				}
+			}
+			for (const [k, v] of Object.entries(usrVars)) {
+				if (k.toLowerCase() !== 'path' && !process.env[k]) {
+					process.env[k] = v;
+				}
+			}
 
 			const expandEnvVars = (str: string) => {
 				return str.replace(/%([^%]+)%/g, (_, name) => {
@@ -201,111 +231,49 @@ async function refreshWindowsPathFromRegistry(): Promise<string | null> {
 				});
 			};
 
-			machinePath = expandEnvVars(parseRegPath(machineRes.stdout));
-			userPath = expandEnvVars(parseRegPath(userRes.stdout));
+			machinePath = expandEnvVars(sysVars['Path'] || '');
+			userPath = expandEnvVars(usrVars['Path'] || '');
 			console.log('[Amypo] Registry query succeeded via execFile (no shell).');
 		} else {
 			console.warn('[Amypo] reg.exe not found at standard path:', regExe);
 		}
 
-		// Dynamically discover tool install paths — works for ANY version/location
-		const commonToolDirs: string[] = [];
-
-		// --- Git: standard install locations ---
-		commonToolDirs.push(
-			'C:\\Program Files\\Git\\cmd',
-			'C:\\Program Files\\Git\\bin',
-			'C:\\Program Files (x86)\\Git\\cmd'
-		);
-
-		// --- Node.js: standard + user-level installs ---
-		commonToolDirs.push(
-			'C:\\Program Files\\nodejs',
-			'C:\\Program Files (x86)\\nodejs'
-		);
-
-		// --- Java: scan ALL JDK versions dynamically ---
-		const javaDirs = ['C:\\Program Files\\Java', 'C:\\Program Files (x86)\\Java'];
-		for (const javaBase of javaDirs) {
-			try {
-				if (fs.existsSync(javaBase)) {
-					const entries = fs.readdirSync(javaBase);
-					for (const entry of entries) {
-						const binDir = path.join(javaBase, entry, 'bin');
-						if (fs.existsSync(binDir)) {
-							commonToolDirs.push(binDir);
-						}
-					}
-				}
-			} catch { /* skip if can't read */ }
+		// Dynamically collect any standard environment home directories if configured on the system
+		const envHomeDirs: string[] = [];
+		const homeVarNames = ['JAVA_HOME', 'PYTHON_HOME', 'MAVEN_HOME', 'M2_HOME', 'GOROOT', 'RUSTUP_HOME', 'CARGO_HOME'];
+		for (const varName of homeVarNames) {
+			const homeVal = process.env[varName];
+			if (homeVal && typeof homeVal === 'string') {
+				const binSubdir = path.join(homeVal, 'bin');
+				try {
+					if (fs.existsSync(binSubdir)) { envHomeDirs.push(binSubdir); }
+					else if (fs.existsSync(homeVal)) { envHomeDirs.push(homeVal); }
+				} catch { }
+			}
 		}
 
-		// --- Maven: scan ALL Maven versions dynamically ---
-		const mavenSearchDirs = [
-			'C:\\Program Files',
-			'C:\\Program Files (x86)',
-			'C:\\tools',
-			'C:\\dev',
-			'C:\\',
-		];
-		for (const searchDir of mavenSearchDirs) {
-			try {
-				if (fs.existsSync(searchDir)) {
-					const entries = fs.readdirSync(searchDir);
-					for (const entry of entries) {
-						if (entry.toLowerCase().includes('maven')) {
-							const binDir = path.join(searchDir, entry, 'bin');
-							if (fs.existsSync(binDir)) {
-								commonToolDirs.push(binDir);
-							}
-						}
-					}
-				}
-			} catch { /* skip */ }
-		}
-
-		// --- User-level installs (LocalAppData, AppData, nvm, etc.) ---
-		if (process.env.LOCALAPPDATA) {
-			commonToolDirs.push(
-				path.join(process.env.LOCALAPPDATA, 'Programs', 'Git', 'cmd'),
-				path.join(process.env.LOCALAPPDATA, 'Programs', 'nodejs')
-			);
-		}
-		if (process.env.APPDATA) {
-			commonToolDirs.push(
-				path.join(process.env.APPDATA, 'npm'),
-				path.join(process.env.APPDATA, 'nvm')  // nvm-windows
-			);
-		}
-		// Chocolatey installs
-		const chocoPath = process.env.ChocolateyInstall || 'C:\\ProgramData\\chocolatey';
-		commonToolDirs.push(path.join(chocoPath, 'bin'));
-
-		// JAVA_HOME / MAVEN_HOME / M2_HOME environment variables (if set)
-		if (process.env.JAVA_HOME) { commonToolDirs.push(path.join(process.env.JAVA_HOME, 'bin')); }
-		if (process.env.MAVEN_HOME) { commonToolDirs.push(path.join(process.env.MAVEN_HOME, 'bin')); }
-		if (process.env.M2_HOME) { commonToolDirs.push(path.join(process.env.M2_HOME, 'bin')); }
-
-		const existingToolDirs = commonToolDirs.filter(dir => {
-			try { return fs.existsSync(dir); } catch { return false; }
-		});
-
-		// Merge everything: standard system paths + registry paths + hardcoded tool paths
-		const allPaths = [...standardPaths, ...machinePath.split(';'), ...userPath.split(';'), ...existingToolDirs]
-			.filter(dir => dir.trim() !== '');
+		// Merge machine registry path + user registry path + standard system paths + active environment
+		const allPaths = [
+			...machinePath.split(';'),
+			...userPath.split(';'),
+			...envHomeDirs,
+			...standardPaths
+		].filter(dir => dir.trim() !== '');
 
 		if (allPaths.length > 0) {
 			const pathEnvKey = Object.keys(process.env).find(k => k.toLowerCase() === 'path') || 'PATH';
 			const currentPath = process.env[pathEnvKey] || '';
 			const currentPathDirs = currentPath.split(';');
 
-			// Deduplicate: registry + tool paths first, then existing
+			// Deduplicate: registry paths first, preserving order
 			const uniqueDirs = Array.from(new Set([...allPaths, ...currentPathDirs]))
 				.filter(dir => dir.trim() !== '');
 
 			const finalPath = uniqueDirs.join(';');
 			process.env[pathEnvKey] = finalPath;
-			console.log('[Amypo] Process PATH refreshed. Total dirs:', uniqueDirs.length);
+			process.env['PATH'] = finalPath;
+			process.env['Path'] = finalPath;
+			console.log('[Amypo] Process PATH refreshed dynamically from Registry. Total dirs:', uniqueDirs.length);
 			return finalPath;
 		}
 	} catch (err) {
@@ -369,15 +337,40 @@ async function ensureGitInPath(): Promise<void> {
 
 //  Activate
 export async function activate(context: vscode.ExtensionContext) {
-	console.log('[Amypo Question] Activating…');
+	const currentExtVersion = context.extension?.packageJSON?.version ?? '1.5.3';
+	const installedAmypoExts = vscode.extensions.all
+		.filter(e => e.id.toLowerCase().includes('amypo'))
+		.map(e => `${e.id} (v${e.packageJSON?.version ?? '?'}) [Active: ${e.isActive}]`);
+
+	console.log('====================================================');
+	console.log(`[Amypo Extension] Active Extension: ${context.extension?.id ?? 'AMYPO.amypo-question'} v${currentExtVersion}`);
+	console.log(`[Amypo Extension] Server Mode: ${server_type.toUpperCase()} | API: ${API_URL}`);
+	console.log(`[Amypo Extension] Installed Amypo Extensions (${installedAmypoExts.length}):\n  - ${installedAmypoExts.join('\n  - ')}`);
+	console.log('====================================================');
 
 	// Refresh Windows PATH from Registry to resolve stale environment from protocol handler launch
 	try {
 		const registryPath = await refreshWindowsPathFromRegistry();
 		if (registryPath) {
-			context.environmentVariableCollection.prepend('PATH', registryPath + ';');
-			context.environmentVariableCollection.prepend('Path', registryPath + ';');
-			context.environmentVariableCollection.prepend('path', registryPath + ';');
+			// 1. Inject live Registry PATH directly into VS Code's terminal configuration so all terminals inherit it
+			try {
+				const termConfig = vscode.workspace.getConfiguration('terminal.integrated.env');
+				const currentWinEnv = termConfig.get<Record<string, string>>('windows') || {};
+				await termConfig.update('windows', { ...currentWinEnv, Path: registryPath }, vscode.ConfigurationTarget.Global);
+			} catch (cfgErr) {
+				console.warn('[Amypo] Could not update terminal.integrated.env.windows:', cfgErr);
+			}
+
+			// 2. Set environmentVariableCollection with single canonical key (avoids 3x duplication and 8KB overflow)
+			refreshTerminalEnv(context);
+
+			// 3. Dispose any stale terminals restored from previous session before PATH was ready
+			if (vscode.window.terminals && vscode.window.terminals.length > 0) {
+				console.log('[Amypo] Disposing stale terminals to ensure fresh environment with live Registry PATH...');
+				for (const term of vscode.window.terminals) {
+					try { term.dispose(); } catch { }
+				}
+			}
 		}
 	} catch (pathErr) {
 		console.error('[Amypo] Error refreshing Windows PATH:', pathErr);
@@ -416,6 +409,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
 				const params = new URLSearchParams(uri.query);
 
+				// Dynamically refresh Windows Registry environment on every incoming deep link
+				refreshTerminalEnv(context);
+				await refreshWindowsPathFromRegistry();
+				await ensureGitInPath();
+
 				const allocation_id = parseInt(params.get('allocation_id') ?? '0');
 				const test_type = parseInt(params.get('test_type') ?? '0');
 				let module_id = parseInt(params.get('module_id') ?? '0');
@@ -441,7 +439,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					return;
 				}
 
-				API_URL = server_type === 'dev' ? 'https://1102amy21.amypo.ai/api' : 'https://endpoint.amypo.ai/api';
+				API_URL = getApiUrl(server_type);
 				context.globalState.update('amypo.serverType', server_type);
 
 				console.log('[Amypo] All params valid — starting test...');
@@ -608,7 +606,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const resp = await jsonsubmitData(payload, endpoint, 0, activeToken);
 			console.log('[Amypo Server Sync] response:', resp);
 
-			if (resp?.status === 200) {
+			if (isSuccessResp(resp)) {
 				console.log('[Amypo Server Sync] Metadata saved successfully.');
 			}
 		} catch (error) {
@@ -896,89 +894,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		const currentPid = process.pid;
 		const parentPid = process.ppid;
 		const appRootNorm = vscode.env.appRoot.toLowerCase().replace(/[\\/]resources[\\/]app$/i, '');
-
-		if (process.platform === 'win32') {
-			// Write the PS script to a temp file — avoids ALL quoting/newline bugs
-			// that occur when passing multi-line scripts inline via -Command.
-			const psScript = [
-				'param([string]$ProjectPath, [string]$AppRoot, [int]$SelfPid, [int]$ParentPid)',
-				'',
-				'# ✅ ONLY these editor process names are blocked',
-				'$blockedEditors = @(',
-				'  "code", "cursor", "sublime_text", "atom", "brackets", "bluefish", "emacs",',
-				'  "idea64", "webstorm64", "pycharm64", "rider64", "eclipse", "devenv",',
-				'  "winscp", "filezilla", "totalcmd", "spyder",',
-				'  "cody", "codex", "windsurf", "Devin", "tabnine", "codeium", "interpreter", "mentat", "swe-agent", "antigravity", "antigravity ide", "antigravity-ide"',
-				')',
-				'',
-				'# Normalize project path',
-				'$pp = $ProjectPath.ToLower().Replace("/", "\\")',
-				'$pp_alt = $ProjectPath.ToLower().Replace("\\", "/")',
-				'$ar = $AppRoot.ToLower()',
-				'',
-				'# PIDs to ignore (our own AmypoCoder process tree)',
-				'$ignorePids = [System.Collections.Generic.HashSet[int]]::new()',
-				'$ignorePids.Add($SelfPid) | Out-Null',
-				'$ignorePids.Add($ParentPid) | Out-Null',
-				'',
-				'# ✅ Safely close any File Explorer windows viewing the project folder or amypo workspace',
-				'try {',
-				'  $shell = New-Object -ComObject Shell.Application',
-				'  foreach ($win in $shell.Windows()) {',
-				'    try {',
-				'      $loc = $win.LocationURL',
-				'      if ($loc) {',
-				'        $decoded = [Uri]::UnescapeDataString($loc).ToLower()',
-				'        if ($decoded -like "*$pp*" -or $decoded -like "*$pp_alt*" -or $decoded -like "*amypo*workspace*") {',
-				'          $win.Quit()',
-				'        }',
-				'      }',
-				'    } catch {}',
-				'  }',
-				'} catch {}',
-				'',
-				'$violations = [System.Collections.Generic.List[string]]::new()',
-				'',
-				'# Scan all running processes',
-				'foreach ($proc in (Get-Process -ErrorAction SilentlyContinue)) {',
-				'  try {',
-				'    # Skip our own process tree',
-				'    if ($ignorePids.Contains($proc.Id)) { continue }',
-				'',
-				'    $pName = $proc.Name.ToLower() -replace "\\.exe$", ""',
-				'',
-				'    # ✅ Only check blocked editors — skip everything else',
-				'    if ($blockedEditors -notcontains $pName) { continue }',
-				'',
-				'    # ✅ Skip our own AmypoCoder instance explicitly',
-				'    if ($pName -like "*amypocoder*") { continue }',
-				'',
-				'    $cmd = ""',
-				'    try {',
-				'      $wmiProc = Get-WmiObject Win32_Process -Filter "ProcessId=$($proc.Id)" -ErrorAction SilentlyContinue',
-				'      $cmd = $wmiProc.CommandLine.ToLower()',
-				'    } catch {}',
-				'',
-				'    if ($cmd -like "*$ar*") { continue }',
-				'',
-				'    # ✅ This is an unauthorized editor — report it',
-				'    $violations.Add("$($proc.Name)|$($proc.Id)|Unauthorized editor running")',
-				'',
-				'  } catch {}',
-				'}',
-				'',
-				'if ($violations.Count -gt 0) { $violations | ConvertTo-Json -Compress }',
-			].join('\r\n');
-
-			_monitorScriptPath = path.join(os.tmpdir(), `amypo-monitor-${Date.now()}.ps1`);
-			try {
-				fs.writeFileSync(_monitorScriptPath, psScript, 'utf8');
-				console.log('[Amypo Security] Monitor script written to:', _monitorScriptPath);
-			} catch (err) {
-				console.warn('[Amypo Security] Could not write monitor script:', err);
-				return;
-			}
-		}
+		const blockedEditors = new Set([
+			"code", "cursor", "sublime_text", "atom", "brackets", "bluefish", "emacs",
+			"idea64", "webstorm64", "pycharm64", "rider64", "eclipse", "devenv",
+			"winscp", "filezilla", "totalcmd", "spyder",
+			"cody", "codex", "windsurf", "devin", "tabnine", "codeium", "interpreter", "mentat", "swe-agent", "antigravity"
+		]);
 
 		const runMonitorTick = async () => {
 			if (isExiting) { return; }
@@ -986,16 +907,26 @@ export async function activate(context: vscode.ExtensionContext) {
 				let violations: string[] = [];
 
 				if (process.platform === 'win32') {
-					if (!_monitorScriptPath) { return; }
-					const cmd = `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${_monitorScriptPath}" -ProjectPath "${projectPath}" -AppRoot "${appRootNorm}" -SelfPid ${currentPid} -ParentPid ${parentPid}`;
-					const { stdout, stderr } = await execAsync(cmd, { timeout: 12000 });
-
-					if (stderr) { console.warn('[Amypo Security] Monitor stderr:', stderr.substring(0, 200)); }
-					if (stdout && stdout.trim()) {
-						try {
-							const parsed = JSON.parse(stdout.trim());
-							violations = Array.isArray(parsed) ? parsed : [String(parsed)];
-						} catch { }
+					// 🚀 Native Windows Tasklist Scanner — ~15ms execution, 0% CPU, no PowerShell, no Temp script
+					try {
+						const { stdout } = await execFileAsync('tasklist.exe', ['/fo', 'csv', '/nh'], { timeout: 5000 });
+						if (stdout) {
+							const lines = stdout.split(/\r?\n/);
+							for (const line of lines) {
+								if (!line.trim()) { continue; }
+								const parts = line.split('","');
+								if (parts.length < 2) { continue; }
+								const procName = parts[0].replace(/^"/, '').toLowerCase().replace(/\.exe$/, '');
+								const pid = parseInt(parts[1], 10);
+								if (isNaN(pid) || pid === currentPid || pid === parentPid) { continue; }
+								if (procName.includes('amypocoder')) { continue; }
+								if (blockedEditors.has(procName)) {
+									violations.push(`${procName}|${pid}|Unauthorized editor running`);
+								}
+							}
+						}
+					} catch (err: any) {
+						console.warn('[Amypo Security] Tasklist scan error:', err?.message?.substring(0, 100));
 					}
 				} else if (process.platform === 'linux') {
 					// 🐧 Linux Native Scanner
@@ -1447,7 +1378,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const resp = await submitData(payload, endpoint, 0, token);
 			console.log('[Amypo EduTech] checkStoreInitialData response:', resp);
 
-			if (resp?.status !== 200 && resp?.status !== 201) {
+			if (!isSuccessResp(resp)) {
 				vscode.window.showErrorMessage('Amypo: Failed to store initial test data.');
 				return null;
 			}
@@ -1485,7 +1416,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const resp = await submitData(payload, endpoint, 0, token);
 			console.log('[Amypo EduTech] fetchQuestionById response:', resp);
 
-			if ((resp?.status === 200 || resp?.status === 201) && resp?.data !== null) {
+			if (isSuccessResp(resp) && resp?.data !== null) {
 				vscode.window.showInformationMessage(`Amypo: Question fetched! (ID: ${questionId})`);
 				return resp.data;
 			}
@@ -1503,7 +1434,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		try {
 			const resp = await submitData({ langIds }, `${API_URL}/language_by_ids`, 0, token);
 
-			if (resp?.status !== 200 || !resp?.data) {
+			if (!isSuccessResp(resp) || !resp?.data) {
 				console.error('[Amypo EduTech] Failed to fetch language details.');
 				return [];
 			}
@@ -1571,16 +1502,59 @@ export async function activate(context: vscode.ExtensionContext) {
 				? `${API_URL}/sandbox/fetch_link_test_details`
 				: `${API_URL}/sandbox/fetch_test_details`;
 
-			console.log('[Amypo EduTech] Test details token:', token);
+			let resp: any = null;
+			try {
+				resp = await submitData(payload, endpoint, 0, token);
+				console.log('[Amypo EduTech] Test details response:', resp);
+			} catch (fetchErr: any) {
+				console.warn('[Amypo EduTech] Primary server fetch error:', fetchErr?.message);
+			}
 
-			const resp = await submitData(payload, endpoint, 0, token);
-			console.log('[Amypo EduTech] Test details response:', resp);
+			// Smart Fallback: Try Production first; if no data found, try Development automatically!
+			if (!isSuccessResp(resp) && API_URL.includes('endpoint.amypo.ai')) {
+				console.log('[Amypo] Not found on Production. Trying Development fallback (https://1102amy21.amypo.ai/api)...');
+				try {
+					const fallbackEndpoint = test_type === 2
+						? 'https://1102amy21.amypo.ai/api/sandbox/fetch_link_test_details'
+						: 'https://1102amy21.amypo.ai/api/sandbox/fetch_test_details';
+					const fallbackResp = await submitData(payload, fallbackEndpoint, 0, token);
+					if (isSuccessResp(fallbackResp)) {
+						console.log('[Amypo] Test details found on Development server! Switched to Development.');
+						resp = fallbackResp;
+						server_type = 'dev';
+						API_URL = getApiUrl(server_type);
+						await context.globalState.update('amypo.serverType', server_type);
+					}
+				} catch (devErr: any) {
+					console.warn('[Amypo] Development fallback error:', devErr?.message);
+				}
+			}
 
-			// Fetch Git details in parallel or sequence
+			// Conversely, if Dev was attempted first and failed, try Production fallback
+			if (!isSuccessResp(resp) && API_URL.includes('1102amy21.amypo.ai')) {
+				console.log('[Amypo] Not found on Development. Trying Production fallback (https://endpoint.amypo.ai/api)...');
+				try {
+					const fallbackEndpoint = test_type === 2
+						? 'https://endpoint.amypo.ai/api/sandbox/fetch_link_test_details'
+						: 'https://endpoint.amypo.ai/api/sandbox/fetch_test_details';
+					const fallbackResp = await submitData(payload, fallbackEndpoint, 0, token);
+					if (isSuccessResp(fallbackResp)) {
+						console.log('[Amypo] Test details found on Production server! Switched to Production.');
+						resp = fallbackResp;
+						server_type = 'prod';
+						API_URL = getApiUrl(server_type);
+						await context.globalState.update('amypo.serverType', server_type);
+					}
+				} catch (prodErr: any) {
+					console.warn('[Amypo] Production fallback error:', prodErr?.message);
+				}
+			}
+
+			// Fetch Git details using the resolved/confirmed server
 			await fetchGitDetails(token);
 
-			// Error: no data
-			if (resp?.status !== 200 || !resp?.data) {
+			// Error: no data found on either server
+			if (!isSuccessResp(resp)) {
 				try {
 					await vscode.commands.executeCommand('workbench.action.focusAuxiliaryBar');
 				} catch { /* command not available */ }
@@ -1595,7 +1569,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			// Parse response
 			const allocation = resp.data.allocation ?? {};
 			const test = resp.data.test ?? {};
-			const course_details = resp.data.couse_details ?? {};
+			const course_details = resp.data.course_details ?? resp.data.couse_details ?? {};
 			const topic_details = resp.data.topic_details ?? {};
 
 			if (test_type == 1) {
@@ -1663,7 +1637,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				user_batch: user_details?.batch_name ?? 'N/A',
 				user_section: user_details?.section_name ?? 'N/A',
 				version: extVersion,
-				storageUrl: server_type === 'dev' ? 'https://1102amy21.amypo.ai/storage' : 'https://endpoint.amypo.ai/storage',
+				storageUrl: getStorageUrl(server_type),
 			};
 
 			// Date validation
@@ -2181,6 +2155,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			console.log('[Amypo] Verification request:', request);
 
+			// Refresh Windows Registry environment right before executing tests so newly installed tools are recognized
+			await refreshWindowsPathFromRegistry();
+
 			let result;
 			if (currentProjectType === 'spring') {
 				result = await verifySpringBoot(request);
@@ -2298,7 +2275,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			const resp = await jsonsubmitData(payload, endpoint, 0, activeToken);
 			console.log('[Amypo] Submit mark resp:', resp);
 
-			if (resp?.status === 200) {
+			if (isSuccessResp(resp)) {
 				if (user_mark > 0 && question) {
 					question.solve_status = 2; // update local status to submitted
 				}
@@ -2372,7 +2349,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		currentProjectType = context.globalState.get<'react' | 'reactspring' | 'spring' | 'selenium'>('amypo.projectType') ?? 'spring';
 		activeToken = context.globalState.get<string>('amypo.token') ?? '';
 		server_type = context.globalState.get<string>('amypo.serverType') ?? 'prod';
-		API_URL = server_type === 'dev' ? 'https://1102amy21.amypo.ai/api' : 'https://endpoint.amypo.ai/api';
+		API_URL = getApiUrl(server_type);
 
 		// 🔒 Security: restart the folder access monitor now that we know the project path
 		if (currentProjectPath) {
@@ -2429,7 +2406,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 					if (savedCourseInfo) {
 						const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.0.6';
-						eduViewProvider.updateView({ ...savedCourseInfo, shouldRestore: true, version: extVersion }, () => { });
+						eduViewProvider.updateView({ ...savedCourseInfo, storageUrl: savedCourseInfo.storageUrl || getStorageUrl(server_type), shouldRestore: true, version: extVersion }, () => { });
 						eduViewProvider.setOnReady(() => {
 							eduViewProvider.postMessage(cachedMsg);
 						});
@@ -2598,45 +2575,28 @@ export async function activate(context: vscode.ExtensionContext) {
 				if (projectPathToDelete && fs.existsSync(projectPathToDelete)) {
 					progress.report({ message: 'Deleting local project folder...' });
 
-					// Close all editors to release file locks
+					// Close all editors and active terminals to release file locks
 					await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+					try {
+						await vscode.commands.executeCommand('workbench.action.terminal.killAll');
+					} catch { }
 
-
+					// Short delay to allow OS to release process file handles
+					await new Promise(resolve => setTimeout(resolve, 300));
 
 					try {
 						await fs.promises.rm(projectPathToDelete, { recursive: true, force: true });
 						console.log(`[Amypo] Deleted project folder: ${projectPathToDelete}`);
 					} catch (err) {
-						console.warn(`[Amypo] Folder is locked, deferring deletion to background process...`);
+						console.warn(`[Amypo] Folder is locked, deferring deletion to native background process...`);
 
 						if (process.platform === 'win32') {
-							const scriptPath = path.join(os.tmpdir(), `amypo-cleanup-${Date.now()}.ps1`);
-							// Use \\?\ prefix to bypass shell restrictions on CLSID folders
-							const psScript = `
-								$folder = '\\\\?\\${projectPathToDelete.split('/').join('\\\\')}'
-								$maxRetries = 15
-								$retryCount = 0
-								Start-Sleep -Seconds 3
-								while (Test-Path -LiteralPath $folder) {
-									if ($retryCount -ge $maxRetries) { break }
-									try {
-										Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction Stop
-										break
-									} catch {
-										$retryCount++
-										Start-Sleep -Seconds 2
-									}
-								}
-								Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
-							`;
-							fs.writeFileSync(scriptPath, psScript);
-
+							// Use native Windows cmd.exe rmdir instead of PowerShell.
+							// Prevents Antivirus alerts triggered by creating .ps1 scripts in %TEMP% with ExecutionPolicy Bypass.
+							const cleanFolder = projectPathToDelete.replace(/\//g, '\\');
 							const child = require('child_process').spawn('cmd.exe', [
-								'/c', 'start', '""', '/MIN', 'powershell.exe',
-								'-WindowStyle', 'Hidden',
-								'-NoProfile',
-								'-ExecutionPolicy', 'Bypass',
-								'-File', scriptPath
+								'/c',
+								`timeout /t 3 /nobreak >nul & for /l %i in (1,1,10) do (if exist "\\\\?\\${cleanFolder}" (rmdir /s /q "\\\\?\\${cleanFolder}" & timeout /t 1 /nobreak >nul) else (exit 0))`
 							], {
 								detached: true,
 								stdio: 'ignore',
@@ -2694,6 +2654,16 @@ export async function activate(context: vscode.ExtensionContext) {
 	axios.interceptors.response.use(
 		response => response,
 		async error => {
+			const reqUrl = error.config?.url || '';
+			// Do not trigger modal for internal downloads, testcase fetches, or github calls
+			if (
+				reqUrl.includes('project-testcase') ||
+				reqUrl.includes('storage') ||
+				reqUrl.includes('api.github.com')
+			) {
+				return Promise.reject(error);
+			}
+
 			if (error.response?.status === 401) {
 				const isQuestionLoaded = activeQuestionDatas && activeQuestionDatas.length > 0;
 				const exitTitle = isQuestionLoaded ? 'Save & Exit' : 'Exit';

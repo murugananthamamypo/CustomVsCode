@@ -92,36 +92,66 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     if (this._onConfirm) {
                         this._onConfirm();
                     }
-                    break;
-                case 'fetchPdf':
-                    const pdfUrl = message.url;
-                    if (pdfUrl) {
-                        const agent = new https.Agent({ rejectUnauthorized: false });
-                        axios.get(pdfUrl, {
-                            responseType: 'arraybuffer',
-                            httpsAgent: agent
-                        })
-                            .then(response => {
-                                const base64 = Buffer.from(response.data).toString('base64');
-                                webviewView.webview.postMessage({
-                                    command: 'pdfData',
-                                    data: base64
-                                });
-                            })
-                            .catch(err => {
-                                console.error('[Amypo] Error downloading PDF:', err);
-                                webviewView.webview.postMessage({
-                                    command: 'pdfDataError',
-                                    error: err.message || 'Failed to download PDF'
-                                });
-                            });
-                    }
-                    break;
-            }
-        });
+									break;
+								case 'fetchPdf':
+									const pdfUrl = message.url;
+									if (pdfUrl) {
+										const agent = new https.Agent({ rejectUnauthorized: false });
+										const downloadPdf = (url: string) => axios.get(url, { responseType: 'arraybuffer', httpsAgent: agent });
 
-        // ✅ Always set HTML immediately
-        if (this._courseInfo) {
+										const isValidPdfBuffer = (data: any) => {
+											if (!data || data.byteLength < 4) return false;
+											const bytes = new Uint8Array(data instanceof ArrayBuffer ? data : data.buffer || data);
+											return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46; // '%PDF'
+										};
+
+										let finalLoadedUrl = pdfUrl;
+										console.log('====================================================');
+										console.log(`[Amypo SRS Document] Fetching SRS PDF from: ${pdfUrl}`);
+										console.log('====================================================');
+
+										downloadPdf(pdfUrl)
+											.then(res => {
+												if (!isValidPdfBuffer(res.data)) {
+													throw new Error('Invalid PDF content received');
+												}
+												return res;
+											})
+											.catch(err => {
+												if (pdfUrl.includes('1102amy21.amypo.ai')) {
+													finalLoadedUrl = pdfUrl.replace('1102amy21.amypo.ai', 'endpoint.amypo.ai');
+													console.log(`[Amypo SRS Document] Dev URL failed (${err?.response?.status ?? err?.message}), falling back to Prod: ${finalLoadedUrl}`);
+													return downloadPdf(finalLoadedUrl);
+												} else if (pdfUrl.includes('endpoint.amypo.ai')) {
+													finalLoadedUrl = pdfUrl.replace('endpoint.amypo.ai', '1102amy21.amypo.ai');
+													console.log(`[Amypo SRS Document] Prod URL failed (${err?.response?.status ?? err?.message}), falling back to Dev: ${finalLoadedUrl}`);
+													return downloadPdf(finalLoadedUrl);
+												}
+												throw err;
+											})
+											.then(response => {
+												console.log(`[Amypo SRS Document] ✓ LOADED SUCCESS: ${finalLoadedUrl} | Size: ${(response.data.byteLength / 1024).toFixed(1)} KB`);
+												const base64 = Buffer.from(response.data).toString('base64');
+												webviewView.webview.postMessage({
+													command: 'pdfData',
+													data: base64,
+													loadedUrl: finalLoadedUrl
+												});
+											})
+											.catch(err => {
+												console.error(`[Amypo SRS Document] ✗ FAILED to load from both servers: ${err?.message}`);
+												webviewView.webview.postMessage({
+													command: 'pdfDataError',
+													error: err.message || 'Failed to download PDF'
+												});
+											});
+									}
+									break;
+							}
+						});
+
+						// ✅ Always set HTML immediately
+						if (this._courseInfo) {
             this._view.webview.html = this._getHtml(this._view.webview, this._extensionUri, this._courseInfo);
         } else if (!this._view.webview.html) {
             // Show loading state until courseInfo arrives
@@ -201,7 +231,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com; worker-src https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; frame-src https://1102amy21.amypo.ai https://endpoint.amypo.ai https://docs.google.com https://drive.google.com https://mozilla.github.io blob: data:; object-src 'none';">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com; worker-src https://cdnjs.cloudflare.com blob:; style-src 'unsafe-inline'; frame-src https://1102amy21.amypo.ai https://endpoint.amypo.ai https://docs.google.com https://drive.google.com https://mozilla.github.io blob: data:; object-src 'none';">
             <script nonce="${nonce}" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
             <style>
                 html, body {
@@ -339,10 +369,10 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     background-color: var(--vscode-editor-background, #f1f2f6);
                 }
                 /* Inherit general background */
-                .topbar { background-color: var(--vscode-editor-background, white); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--vscode-widget-border, #dfe4ea); }
+                .topbar { background-color: var(--vscode-editor-background, white); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--vscode-widget-border, #dfe4ea); position: relative; z-index: 100; flex-shrink: 0; box-sizing: border-box; }
                 .topbar-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
                 .logo { height: 24px; }
-                .info-pill { font-size: 13px; color: var(--vscode-foreground, #636e72); display: flex; align-items: center; gap: 8px; border-left: 1px solid var(--vscode-widget-border, #dfe4ea); padding-left: 16px; font-weight: 500; }
+                .info-pill { font-size: 13px; color: var(--vscode-foreground, #636e72); display: flex; align-items: center; gap: 8px; border-left: 1px solid var(--vscode-widget-border, #dfe4ea); padding-left: 16px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
                 .icon-btn { border: 1px solid var(--vscode-widget-border, #dfe4ea); border-radius: 50%; padding: 4px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; }
                 .icon-btn.yellow { border-color: #ffd32a; color: #ffa801; }
                 .main-layout {
@@ -540,15 +570,53 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                 }
                 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-                .tooltip-container { position: relative; display: inline-block; cursor: pointer; }
-                .tooltip-content {
-                    display: none; position: absolute; top: 100%; left: 0; margin-top: 8px;
-                    background: var(--vscode-editorWidget-background, white);
-                    color: var(--vscode-editor-foreground, black); border: 1px solid var(--vscode-widget-border, #ccc);
-                    padding: 12px 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    z-index: 100; font-size: 13px; font-weight: normal; white-space: normal; line-height: 1.6; width: 250px;
+                .tooltip-container {
+                    position: relative;
+                    display: inline-flex;
+                    align-items: center;
+                    cursor: pointer;
                 }
-                .tooltip-content p { margin: 4px 0; }
+                .tooltip-content {
+                    display: none;
+                    position: absolute;
+                    top: calc(100% + 8px);
+                    left: 0;
+                    min-width: 280px;
+                    max-width: min(420px, 85vw);
+                    width: max-content;
+                    background: var(--vscode-editorWidget-background, #ffffff);
+                    color: var(--vscode-editor-foreground, #2d3436);
+                    border: 1px solid var(--vscode-widget-border, #ccc);
+                    padding: 14px 18px;
+                    border-radius: 8px;
+                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+                    z-index: 1000;
+                    font-size: 13px;
+                    font-weight: normal;
+                    white-space: normal;
+                    line-height: 1.5;
+                    box-sizing: border-box;
+                    word-break: break-word;
+                    overflow-wrap: anywhere;
+                }
+                /* Align Course Details to right side so it never clips past the screen edge */
+                .info-pill:last-child .tooltip-content {
+                    left: auto;
+                    right: 0;
+                }
+                .tooltip-content p {
+                    margin: 6px 0;
+                    display: grid;
+                    grid-template-columns: auto 1fr;
+                    column-gap: 8px;
+                    align-items: baseline;
+                    word-break: break-word;
+                    overflow-wrap: anywhere;
+                }
+                .tooltip-content p b {
+                    white-space: nowrap;
+                    color: var(--vscode-editor-foreground, #2d3436);
+                }
                 .tooltip-container:hover .tooltip-content,
                 .tooltip-container:focus-within .tooltip-content { display: block; }
 
@@ -676,8 +744,9 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                             v${courseInfo.version ?? '1.0.6'}
                         </span>
                 </div>
+            </div>
 
-                <div class="main-layout">
+            <div class="main-layout">
                     <div class="content-area">
                         <div class="content-header">
                             <div class="tab-container">
@@ -914,7 +983,9 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
 
                                     const baseUrl = storageUrl.endsWith('/') ? storageUrl.slice(0, -1) : storageUrl;
                                     const cleanPath = pdfPath.startsWith('/') ? pdfPath : '/' + pdfPath;
-                                    const fullUrl = baseUrl + cleanPath + pdfFile;
+                                    const pathWithSlash = cleanPath.endsWith('/') ? cleanPath : cleanPath + '/';
+                                    const fileWithoutSlash = pdfFile.startsWith('/') ? pdfFile.slice(1) : pdfFile;
+                                    const fullUrl = baseUrl + pathWithSlash + fileWithoutSlash;
 
                                     console.log('[Amypo] Requesting PDF from extension host:', fullUrl);
 
@@ -1131,7 +1202,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
 
                         const loadingTask = pdfjsLib.getDocument({ data: arr });
                         loadingTask.promise.then(function(pdf) {
-                            console.log('[Amypo] PDF loaded, pages:', pdf.numPages);
+                            console.log('[Amypo SRS Document] ✓ PDF successfully rendered in viewer! Pages:', pdf.numPages, '| URL:', message.loadedUrl || 'default');
 
                             let renderedCount = 0;
                             const totalPages = pdf.numPages;

@@ -25,7 +25,7 @@ async function storeError(url: string, error: any): Promise<void> {
         await axios.post(
             `${currentBaseUrl}/store_errors`,
             payload,
-            { headers: { 'Content-Type': 'application/json' } },
+            { headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' } },
         );
     } catch {
         // never propagate — error reporting must not break the app
@@ -46,7 +46,9 @@ export async function fetchData(endpoint: string, token: string = ''): Promise<a
     try {
         const response = await axios.get<any>(`${endpoint}`, {
             headers: {
+                'Accept': 'application/json',
                 Authorization: safeToken ? `Bearer ${safeToken}` : '',
+                'x-client-key': '9f3a7c1d5e8b2a6f4c0d7e1b9a3f6c8d2e5a7b1c4d9f0e6a3b8c2d5f7a1e9c0'
             },
         })
         return response.data
@@ -79,6 +81,7 @@ export async function submitData(
 
         const response = await axios.post(endpoint, payload, {
             headers: {
+                'Accept': 'application/json',
                 'Content-Type': 'application/json',
                 Authorization: token ? `Bearer ${token}` : '',
                 'x-client-key': '9f3a7c1d5e8b2a6f4c0d7e1b9a3f6c8d2e5a7b1c4d9f0e6a3b8c2d5f7a1e9c0'
@@ -113,8 +116,10 @@ export async function jsonsubmitData(
             url: endpoint,
             data: payload,
             headers: {
+                'Accept': 'application/json',
                 'Content-Type': 'application/json',
                 Authorization: safeToken ? `Bearer ${safeToken}` : '',
+                'x-client-key': '9f3a7c1d5e8b2a6f4c0d7e1b9a3f6c8d2e5a7b1c4d9f0e6a3b8c2d5f7a1e9c0'
             },
         })
 

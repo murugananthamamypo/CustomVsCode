@@ -176,6 +176,7 @@ const terminalPlatformConfiguration: IConfigurationNode = {
 				'PowerShell': {
 					source: 'PowerShell',
 					icon: Codicon.terminalPowershell.id,
+					args: ['-ExecutionPolicy', 'Bypass']
 				},
 				'Command Prompt': {
 					path: [

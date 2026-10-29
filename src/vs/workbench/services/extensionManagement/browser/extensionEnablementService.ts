@@ -430,6 +430,11 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 	}
 
 	private _isDisabledInEnv(extension: IExtension): boolean {
+		const id = extension.identifier.id.toLowerCase();
+		if (id === 'github.copilot' || id === 'github.copilot-chat') {
+			return true;
+		}
+
 		if (this.allUserExtensionsDisabled) {
 			return !extension.isBuiltin && !isResolverExtension(extension.manifest, this.environmentService.remoteAuthority);
 		}

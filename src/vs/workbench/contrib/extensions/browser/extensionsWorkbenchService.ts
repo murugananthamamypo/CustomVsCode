@@ -1325,7 +1325,10 @@ export class ExtensionsWorkbenchService extends Disposable implements IExtension
 			this._installed = [];
 			for (const extensions of this.extensionsServers) {
 				for (const extension of extensions.local) {
-					this._installed.push(extension);
+					const id = extension.identifier.id.toLowerCase();
+					if (id !== 'github.copilot' && id !== 'github.copilot-chat') {
+						this._installed.push(extension);
+					}
 				}
 			}
 		}
@@ -1338,15 +1341,18 @@ export class ExtensionsWorkbenchService extends Disposable implements IExtension
 
 	async queryLocal(server?: IExtensionManagementServer): Promise<IExtension[]> {
 		if (server) {
+			let res: IExtension[] = [];
 			if (this.localExtensions && this.extensionManagementServerService.localExtensionManagementServer === server) {
-				return this.localExtensions.queryInstalled(this.getProductVersion());
+				res = await this.localExtensions.queryInstalled(this.getProductVersion());
+			} else if (this.remoteExtensions && this.extensionManagementServerService.remoteExtensionManagementServer === server) {
+				res = await this.remoteExtensions.queryInstalled(this.getProductVersion());
+			} else if (this.webExtensions && this.extensionManagementServerService.webExtensionManagementServer === server) {
+				res = await this.webExtensions.queryInstalled(this.getProductVersion());
 			}
-			if (this.remoteExtensions && this.extensionManagementServerService.remoteExtensionManagementServer === server) {
-				return this.remoteExtensions.queryInstalled(this.getProductVersion());
-			}
-			if (this.webExtensions && this.extensionManagementServerService.webExtensionManagementServer === server) {
-				return this.webExtensions.queryInstalled(this.getProductVersion());
-			}
+			return res.filter(e => {
+				const id = e.identifier.id.toLowerCase();
+				return id !== 'github.copilot' && id !== 'github.copilot-chat';
+			});
 		}
 
 		if (this.localExtensions) {

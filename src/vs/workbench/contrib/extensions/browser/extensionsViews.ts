@@ -370,6 +370,10 @@ export class ExtensionsListView extends AbstractExtensionsListView<IExtension> {
 	}
 
 	private async filterLocal(local: IExtension[], runningExtensions: readonly IExtensionDescription[], query: Query, options: IQueryOptions): Promise<{ extensions: IExtension[]; canIncludeInstalledExtensions: boolean; description?: string }> {
+		local = local.filter(e => {
+			const id = e.identifier.id.toLowerCase();
+			return id !== 'github.copilot' && id !== 'github.copilot-chat';
+		});
 		const value = query.value;
 		let extensions: IExtension[] = [];
 		let description: string | undefined;
@@ -468,8 +472,14 @@ export class ExtensionsListView extends AbstractExtensionsListView<IExtension> {
 
 		value = value.replace(/@installed/g, '').replace(/@sort:(\w+)(-\w*)?/g, '').trim().toLowerCase();
 
-		const matchingText = (e: IExtension) => (!e.isBuiltin || e.identifier.id.toLowerCase() === 'amypo.amypo-question' || e.identifier.id.toLowerCase() === 'amypo.amypo-browser') && (e.name.toLowerCase().indexOf(value) > -1 || e.displayName.toLowerCase().indexOf(value) > -1 || e.description.toLowerCase().indexOf(value) > -1)
-			&& this.filterExtensionByCategory(e, includedCategories, excludedCategories);
+		const matchingText = (e: IExtension) => {
+			const id = e.identifier.id.toLowerCase();
+			if (id === 'github.copilot' || id === 'github.copilot-chat') {
+				return false;
+			}
+			return (!e.isBuiltin || id === 'amypo.amypo-question' || id === 'amypo.amypo-browser') && (e.name.toLowerCase().indexOf(value) > -1 || e.displayName.toLowerCase().indexOf(value) > -1 || e.description.toLowerCase().indexOf(value) > -1)
+				&& this.filterExtensionByCategory(e, includedCategories, excludedCategories);
+		};
 		let result;
 
 		if (options.sortBy !== undefined) {
@@ -578,9 +588,15 @@ export class ExtensionsListView extends AbstractExtensionsListView<IExtension> {
 		local = local.filter(e => e.isBuiltin === includeBuiltin);
 		const result = local
 			.sort((e1, e2) => e1.displayName.localeCompare(e2.displayName))
-			.filter(e => runningExtensions.some(r => areSameExtensions({ id: r.identifier.value, uuid: r.uuid }, e.identifier))
-				&& (e.name.toLowerCase().indexOf(value) > -1 || e.displayName.toLowerCase().indexOf(value) > -1)
-				&& this.filterExtensionByCategory(e, includedCategories, excludedCategories));
+			.filter(e => {
+				const id = e.identifier.id.toLowerCase();
+				if (id === 'github.copilot' || id === 'github.copilot-chat') {
+					return false;
+				}
+				return runningExtensions.some(r => areSameExtensions({ id: r.identifier.value, uuid: r.uuid }, e.identifier))
+					&& (e.name.toLowerCase().indexOf(value) > -1 || e.displayName.toLowerCase().indexOf(value) > -1)
+					&& this.filterExtensionByCategory(e, includedCategories, excludedCategories);
+			});
 
 		return this.sortExtensions(result, options);
 	}
@@ -1689,11 +1705,15 @@ export class SearchMarketplaceExtensionsView extends ExtensionsListView {
 				this.options.server
 			);
 
-			const installedExtensions = allLocalExtensions.filter(e =>
-				!e.isBuiltin ||
-				e.identifier.id.toLowerCase() === 'amypo.amypo-question' ||
-				e.identifier.id.toLowerCase() === 'amypo.amypo-browser'
-			);
+			const installedExtensions = allLocalExtensions.filter(e => {
+				const id = e.identifier.id.toLowerCase();
+				if (id === 'github.copilot' || id === 'github.copilot-chat') {
+					return false;
+				}
+				return !e.isBuiltin ||
+					id === 'amypo.amypo-question' ||
+					id === 'amypo.amypo-browser';
+			});
 
 			// ✅ Combine recommended + filtered locals (no duplicates)
 			const allAvailable: IExtension[] = [];

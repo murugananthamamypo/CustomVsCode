@@ -5314,12 +5314,6 @@
 					"&& denotes a mnemonic"
 				]
 			},
-			{
-				"key": "miToggleFullScreen",
-				"comment": [
-					"&& denotes a mnemonic"
-				]
-			},
 			"openedRecentlyOpenedFolder",
 			"openedRecentlyOpenedWorkspace",
 			"openRecent",
@@ -5330,7 +5324,6 @@
 			"recentDirtyWorkspaceAriaLabel",
 			"reloadWindow",
 			"remove",
-			"toggleFullScreen",
 			"workspacesAndFolders"
 		],
 		"vs/workbench/browser/actions/workspaceActions": [
@@ -14099,6 +14092,8 @@
 			"suggestProxyError"
 		],
 		"vs/workbench/contrib/extensions/browser/extensionsViews": [
+			"amypo.marketplaceDisabled",
+			"amypo.searchError",
 			"error",
 			"no extensions found",
 			"no local extensions",
@@ -28845,7 +28840,6 @@
 			"&&About",
 			"Confirm Before Close",
 			"&&More...",
-			"&&Full Screen",
 			"Folder Opened in a Window",
 			"Workspace Opened in a Window",
 			"Open Recent...",
@@ -28856,7 +28850,6 @@
 			"{0}, workspace with unsaved changes",
 			"Reload Window",
 			"Remove from Recently Opened",
-			"Toggle Full Screen",
 			"folders & workspaces"
 		],
 		"vs/workbench/browser/actions/workspaceActions": [
@@ -36356,6 +36349,8 @@
 			"Marketplace returned 'ECONNREFUSED'. Please check the 'http.proxy' setting."
 		],
 		"vs/workbench/contrib/extensions/browser/extensionsViews": [
+			"Marketplace search is disabled until a test starts.",
+			"Error searching extensions.",
 			"Error while fetching extensions. {0}",
 			"No extensions found.",
 			"There are no extensions to install.",
