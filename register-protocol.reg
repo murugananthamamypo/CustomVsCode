@@ -11,7 +11,7 @@ Windows Registry Editor Version 5.00
 [HKEY_CLASSES_ROOT\amypo\shell]
 [HKEY_CLASSES_ROOT\amypo\shell\open]
 [HKEY_CLASSES_ROOT\amypo\shell\open\command]
-@="cmd.exe /c start \"\" \"C:\\Users\\Admin\\Desktop\\CustomVsCode\\CustomVsCode\\.build\\electron\\AmypoCoder.exe\" \"C:\\Users\\Admin\\Desktop\\CustomVsCode\\CustomVsCode\" --open-url \"%1\""
+@="\"C:\\Users\\Admin\\Desktop\\CustomVsCode\\CustomVsCode\\.build\\electron\\AmypoCoder.exe\" \"C:\\Users\\Admin\\Desktop\\CustomVsCode\\CustomVsCode\" --open-url \"%1\""
 
 ; --- Registration for amypocoder:// ---
 [HKEY_CLASSES_ROOT\amypocoder]
@@ -24,4 +24,4 @@ Windows Registry Editor Version 5.00
 [HKEY_CLASSES_ROOT\amypocoder\shell]
 [HKEY_CLASSES_ROOT\amypocoder\shell\open]
 [HKEY_CLASSES_ROOT\amypocoder\shell\open\command]
-@="cmd.exe /c start \"\" \"C:\\Users\\Admin\\Desktop\\CustomVsCode\\CustomVsCode\\.build\\electron\\AmypoCoder.exe\" \"C:\\Users\\Admin\\Desktop\\CustomVsCode\\CustomVsCode\" --open-url \"%1\""
+@="\"C:\\Users\\Admin\\Desktop\\CustomVsCode\\CustomVsCode\\.build\\electron\\AmypoCoder.exe\" \"C:\\Users\\Admin\\Desktop\\CustomVsCode\\CustomVsCode\" --open-url \"%1\""

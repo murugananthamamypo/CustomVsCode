@@ -486,10 +486,10 @@
     esquery "^1.6.0"
     jsdoc-type-pratt-parser "~4.1.0"
 
-"@esbuild/win32-x64@0.27.4":
+"@esbuild/darwin-x64@0.27.4":
   version "0.27.4"
-  resolved "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.27.4.tgz"
-  integrity sha512-+knoa0BDoeXgkNvvV1vvbZX4+hizelrkwmGJBdT17t8FNPwG2lKemmuMZlmaNQ3ws3DKKCxpb4zRZEIp3UxFCg==
+  resolved "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.27.4.tgz"
+  integrity sha512-sR+OiKLwd15nmCdqpXMnuJ9W2kpy0KigzqScqHI3Hqwr7IXxBp3Yva+yJwoqh7rE8V77tdoheRYataNKL4QrPw==
 
 "@eslint-community/eslint-utils@^4.8.0", "@eslint-community/eslint-utils@^4.9.1":
   version "4.9.1"
@@ -574,6 +574,11 @@
     "@eslint/core" "^0.17.0"
     levn "^0.4.1"
 
+"@github/copilot-darwin-x64@1.0.11":
+  version "1.0.11"
+  resolved "https://registry.npmjs.org/@github/copilot-darwin-x64/-/copilot-darwin-x64-1.0.11.tgz"
+  integrity sha512-VeuPv8rzBVGBB8uDwMEhcHBpldoKaq26yZ5YQm+G9Ka5QIF+1DMah8ZNRMVsTeNKkb1ji9G8vcuCsaPbnG3fKg==
+
 "@github/copilot-sdk@^0.1.32":
   version "0.1.32"
   resolved "https://registry.npmjs.org/@github/copilot-sdk/-/copilot-sdk-0.1.32.tgz"
@@ -582,11 +587,6 @@
     "@github/copilot" "^1.0.2"
     vscode-jsonrpc "^8.2.1"
     zod "^4.3.6"
-
-"@github/copilot-win32-x64@1.0.11":
-  version "1.0.11"
-  resolved "https://registry.npmjs.org/@github/copilot-win32-x64/-/copilot-win32-x64-1.0.11.tgz"
-  integrity sha512-fKGkSNamzs3h9AbmswNvPYJBORCb2Y8CbusijU3C7fT3ohvqnHJwKo5iHhJXLOKZNOpFZgq9YKha410u9sIs6Q==
 
 "@github/copilot@^1.0.2", "@github/copilot@^1.0.4-0":
   version "1.0.11"
@@ -1105,10 +1105,10 @@
   resolved "https://registry.npmjs.org/@oxc-project/types/-/types-0.122.0.tgz"
   integrity sha512-oLAl5kBpV4w69UtFZ9xqcmTi+GENWOcPF7FCrczTiBbmC0ibXxCwyvZGbO39rCVEuLGAZM84DH0pUIyyv/YJzA==
 
-"@parcel/watcher-win32-x64@2.5.6":
+"@parcel/watcher-darwin-x64@2.5.6":
   version "2.5.6"
-  resolved "https://registry.npmjs.org/@parcel/watcher-win32-x64/-/watcher-win32-x64-2.5.6.tgz"
-  integrity sha512-hbQlYcCq5dlAX9Qx+kFb0FHue6vbjlf0FrNzSKdYK2APUf7tGfGxQCk2ihEREmbR6ZMc0MVAD5RIX/41gpUzTw==
+  resolved "https://registry.npmjs.org/@parcel/watcher-darwin-x64/-/watcher-darwin-x64-2.5.6.tgz"
+  integrity sha512-HgvOf3W9dhithcwOWX9uDZyn1lW9R+7tPZ4sug+NGrGIo4Rk1hAXLEbcH1TQSqxts0NYXXlOWqVpvS1SFS4fRg==
 
 "@parcel/watcher@^2.5.6":
   version "2.5.6"
@@ -1186,10 +1186,10 @@
     tar-fs "^3.1.1"
     yargs "^17.7.2"
 
-"@rolldown/binding-win32-x64-msvc@1.0.0-rc.12":
+"@rolldown/binding-darwin-x64@1.0.0-rc.12":
   version "1.0.0-rc.12"
-  resolved "https://registry.npmjs.org/@rolldown/binding-win32-x64-msvc/-/binding-win32-x64-msvc-1.0.0-rc.12.tgz"
-  integrity sha512-PyqoipaswDLAZtot351MLhrlrh6lcZPo2LSYE+VDxbVk24LVKAGOuE4hb8xZQmrPAuEtTZW8E6D2zc5EUZX4Lw==
+  resolved "https://registry.npmjs.org/@rolldown/binding-darwin-x64/-/binding-darwin-x64-1.0.0-rc.12.tgz"
+  integrity sha512-ZCsYknnHzeXYps0lGBz8JrF37GpE9bFVefrlmDrAQhOEi4IOIlcoU1+FwHEtyXGx2VkYAvhu7dyBf75EJQffBw==
 
 "@rolldown/pluginutils@1.0.0-rc.12":
   version "1.0.0-rc.12"
@@ -2004,10 +2004,10 @@
     "@typescript-eslint/types" "8.57.2"
     eslint-visitor-keys "^5.0.0"
 
-"@typescript/native-preview-win32-x64@7.0.0-dev.20260324.1":
+"@typescript/native-preview-darwin-x64@7.0.0-dev.20260324.1":
   version "7.0.0-dev.20260324.1"
-  resolved "https://registry.npmjs.org/@typescript/native-preview-win32-x64/-/native-preview-win32-x64-7.0.0-dev.20260324.1.tgz"
-  integrity sha512-6J8V5cHOrh7Cjl6lv8+zsDY5NkbMYBwXroKlFUzThZ7vpJlEaa51DPQyCyILIXodv5XODd5arRcbaY+cC6Et8Q==
+  resolved "https://registry.npmjs.org/@typescript/native-preview-darwin-x64/-/native-preview-darwin-x64-7.0.0-dev.20260324.1.tgz"
+  integrity sha512-hlMIJQjlbwNTH3iS8IivAxeu7I4OLm645kErSynAR4i8O6lZiSeaZndUqIDYx/+er4bb01X0Fnxa8BTW2Emv2A==
 
 "@typescript/native-preview@^7.0.0-dev.20260306":
   version "7.0.0-dev.20260324.1"
@@ -2240,10 +2240,10 @@
   resolved "https://registry.npmjs.org/@vscode/v8-heap-parser/-/v8-heap-parser-0.1.0.tgz"
   integrity sha512-3EvQak7EIOLyIGz+IP9qSwRmP08ZRWgTeoRgAXPVkkDXZ8riqJ7LDtkgx++uHBiJ3MUaSdlUYPZcLFFw7E6zGg==
 
-"@vscode/vsce-sign-win32-x64@2.0.6":
+"@vscode/vsce-sign-darwin-x64@2.0.6":
   version "2.0.6"
-  resolved "https://registry.npmjs.org/@vscode/vsce-sign-win32-x64/-/vsce-sign-win32-x64-2.0.6.tgz"
-  integrity sha512-mgth9Kvze+u8CruYMmhHw6Zgy3GRX2S+Ed5oSokDEK5vPEwGGKnmuXua9tmFhomeAnhgJnL4DCna3TiNuGrBTQ==
+  resolved "https://registry.npmjs.org/@vscode/vsce-sign-darwin-x64/-/vsce-sign-darwin-x64-2.0.6.tgz"
+  integrity sha512-25GsUbTAiNfHSuRItoQafXOIpxlYj+IXb4/qarrXu7kmbH94jlm5sdWSCKrrREs8+GsXF1b+l3OB7VJy5jsykw==
 
 "@vscode/vsce-sign@^2.0.0":
   version "2.0.9"
@@ -2313,13 +2313,6 @@
     js-base64 "^3.7.4"
     node-fetch "2.6.8"
     playwright "^1.29.2"
-
-"@vscode/windows-ca-certs@^0.3.1":
-  version "0.3.4"
-  resolved "https://registry.npmjs.org/@vscode/windows-ca-certs/-/windows-ca-certs-0.3.4.tgz"
-  integrity sha512-DcDLjBpu8srh6wUiZqEMyhXHzNDO81ecZOttL3+1u3Iht4CS6Qtxy5WkTPX/aDgbheASO/MK8yg6uLq58RzEWg==
-  dependencies:
-    node-addon-api "^8.2.0"
 
 "@vscode/windows-mutex@^0.5.0":
   version "0.5.3"
@@ -5629,6 +5622,24 @@ fs.realpath@^1.0.0:
   resolved "https://registry.npmjs.org/fs.realpath/-/fs.realpath-1.0.0.tgz"
   integrity sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==
 
+fsevents@^1.2.7:
+  version "1.2.13"
+  resolved "https://registry.npmjs.org/fsevents/-/fsevents-1.2.13.tgz"
+  integrity sha512-oWb1Z6mkHIskLzEJ/XWX0srkpkTQ7vaopMQkyaEIoq0fmtFVxOthb8cCxeT+p3ynTdkk/RZwbgG4brR5BeWECw==
+  dependencies:
+    bindings "^1.5.0"
+    nan "^2.12.1"
+
+fsevents@~2.3.1, fsevents@~2.3.2, fsevents@~2.3.3:
+  version "2.3.3"
+  resolved "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz"
+  integrity sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==
+
+fsevents@2.3.2:
+  version "2.3.2"
+  resolved "https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz"
+  integrity sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==
+
 function-bind@^1.1.2:
   version "1.1.2"
   resolved "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz"
@@ -7506,10 +7517,10 @@ liftoff@^3.1.0:
     rechoir "^0.6.2"
     resolve "^1.1.7"
 
-lightningcss-win32-x64-msvc@1.32.0:
+lightningcss-darwin-x64@1.32.0:
   version "1.32.0"
-  resolved "https://registry.npmjs.org/lightningcss-win32-x64-msvc/-/lightningcss-win32-x64-msvc-1.32.0.tgz"
-  integrity sha512-Amq9B/SoZYdDi1kFrojnoqPLxYhQ4Wo5XiL8EVJrVsB8ARoC1PWW6VGtT0WKCemjy8aC+louJnjS7U18x3b06Q==
+  resolved "https://registry.npmjs.org/lightningcss-darwin-x64/-/lightningcss-darwin-x64-1.32.0.tgz"
+  integrity sha512-U+QsBp2m/s2wqpUYT/6wnlagdZbtZdndSmut/NJqlCcMLTWp5muCrID+K5UJ6jqD2BFshejCYXniPDbNh73V8w==
 
 lightningcss@^1.32.0:
   version "1.32.0"
@@ -8247,6 +8258,11 @@ mute-stream@~0.0.4:
   version "0.0.8"
   resolved "https://registry.npmjs.org/mute-stream/-/mute-stream-0.0.8.tgz"
   integrity sha512-nnbWWOkoWyUsTjKrhgD0dcz22mdkSnpYqbEjIm2nhwhuxlSkpywJmBo8h0ZqJdkp73mb90SssHkN4rsRaBAfAA==
+
+nan@^2.12.1:
+  version "2.26.2"
+  resolved "https://registry.npmjs.org/nan/-/nan-2.26.2.tgz"
+  integrity sha512-0tTvBTYkt3tdGw22nrAy50x7gpbGCCFH3AFcyS5WiUu7Eu4vWlri1woE6qHBSfy11vksDqkiwjOnlR7WV8G1Hw==
 
 nanoid@^3.3.11:
   version "3.3.11"

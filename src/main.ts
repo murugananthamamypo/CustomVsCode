@@ -6,7 +6,6 @@
 import * as path from 'node:path';
 import * as fs from 'original-fs';
 import * as os from 'node:os';
-import * as cp from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import { configurePortable } from './bootstrap-node.js';
 import { bootstrapESM } from './bootstrap-esm.js';
@@ -20,63 +19,6 @@ import { resolveNLSConfiguration } from './vs/base/node/nls.js';
 import { getUNCHost, addUNCHostToAllowlist } from './vs/base/node/unc.js';
 import { INLSConfiguration } from './vs/nls.js';
 import { NativeParsedArgs } from './vs/platform/environment/common/argv.js';
-
-// ── Restore live Windows Environment from Registry at Core Startup ──
-// When launched via browser deep link (amypocoder://), the browser sandbox strips/stales the PATH.
-// By reading the real Windows Registry here, the main process, PTY host, terminal, and all language tools
-// (Java, Python, C++, Go, Rust, Node, etc.) automatically inherit the true system PATH without any static hardcoding.
-if (process.platform === 'win32') {
-	try {
-		const sysRoot = process.env.SystemRoot || process.env.windir || 'C:\\Windows';
-		const regExe = path.join(sysRoot, 'System32', 'reg.exe');
-		if (fs.existsSync(regExe)) {
-			const parseEnvBlock = (out: string) => {
-				const vars: Record<string, string> = {};
-				const lines = out.split(/\r?\n/);
-				for (const line of lines) {
-					const m = line.match(/^\s+(.+?)\s+(?:REG_SZ|REG_EXPAND_SZ)\s*(.*)$/i);
-					if (m) {
-						vars[m[1]] = m[2] ? m[2].trim() : '';
-					}
-				}
-				return vars;
-			};
-
-			const opts = { encoding: 'utf8' as const, timeout: 5000 };
-			const mOut = cp.execFileSync(regExe, ['query', 'HKLM\\System\\CurrentControlSet\\Control\\Session Manager\\Environment'], opts);
-			const uOut = cp.execFileSync(regExe, ['query', 'HKCU\\Environment'], opts);
-
-			const sysVars = parseEnvBlock(mOut);
-			const usrVars = parseEnvBlock(uOut);
-
-			const expandEnv = (str: string) => str.replace(/%([^%]+)%/g, (_, n) => {
-				const k = Object.keys(process.env).find(x => x.toLowerCase() === n.toLowerCase());
-				return k ? process.env[k] || '' : `%${n}%`;
-			});
-
-			// Populate any missing tool HOME variables (JAVA_HOME, MAVEN_HOME, PYTHON_HOME, etc.)
-			for (const [k, v] of Object.entries(sysVars)) {
-				if (k.toLowerCase() !== 'path' && !process.env[k]) {
-					process.env[k] = expandEnv(v);
-				}
-			}
-			for (const [k, v] of Object.entries(usrVars)) {
-				if (k.toLowerCase() !== 'path' && !process.env[k]) {
-					process.env[k] = expandEnv(v);
-				}
-			}
-
-			const fullRegPath = expandEnv(sysVars['Path'] || '') + ';' + expandEnv(usrVars['Path'] || '');
-			if (fullRegPath.trim()) {
-				const regDirs = fullRegPath.split(';').filter(d => d.trim());
-				const curDirs = (process.env.PATH || process.env.Path || '').split(';').filter(d => d.trim());
-				const merged = Array.from(new Set([...regDirs, ...curDirs])).join(';');
-				process.env.PATH = merged;
-				process.env.Path = merged;
-			}
-		}
-	} catch { /* ignore if reg query fails */ }
-}
 
 perf.mark('code/didStartMain');
 

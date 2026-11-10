@@ -4,10 +4,6 @@
       ? ('; LicenseFile: "' + RepoDir + '\licenses\LICENSE-' + Language + '.rtf"') \
       : '; LicenseFile: "' + RepoDir + '\' + RootLicenseFileName + '"'
 
-#ifndef Architecture
-#define Architecture Arch
-#endif
-
 [Setup]
 AppId={#AppId}
 AppName=Amypo Coder
@@ -19,7 +15,7 @@ AppUpdatesURL=
 DefaultGroupName={#NameLong}
 AllowNoIcons=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=AmypoCoderSetup-{#Architecture}-{#Version}
+OutputBaseFilename=AmypoCoderSetup
 Compression=lzma
 SolidCompression=yes
 AppMutex={code:GetAppMutex}
@@ -146,7 +142,7 @@ Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypocoder"; ValueTyp
 Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypocoder\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ExeBasename}.exe,0"; Flags: uninsdeletevalue
 Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypocoder\shell"; ValueType: string; ValueName: ""; ValueData: "open"; Flags: uninsdeletevalue
 Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypocoder\shell\open"; ValueType: string; ValueName: ""; ValueData: ""; Flags: uninsdeletevalue
-Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypocoder\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """cmd.exe"" /c start """" ""{app}\{#ExeBasename}.exe"" ""--open-url"" ""%1"""; Flags: uninsdeletevalue
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypocoder\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExeBasename}.exe"" ""--open-url"" ""%1"""; Flags: uninsdeletevalue
 
 ; --- Support for the old amypo:// protocol name ---
 Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypo"; ValueType: string; ValueName: ""; ValueData: "URL:Amypo Coder Protocol"; Flags: uninsdeletekey
@@ -154,7 +150,7 @@ Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypo"; ValueType: st
 Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypo\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ExeBasename}.exe,0"; Flags: uninsdeletevalue
 Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypo\shell"; ValueType: string; ValueName: ""; ValueData: "open"; Flags: uninsdeletevalue
 Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypo\shell\open"; ValueType: string; ValueName: ""; ValueData: ""; Flags: uninsdeletevalue
-Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypo\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """cmd.exe"" /c start """" ""{app}\{#ExeBasename}.exe"" ""--open-url"" ""%1"""; Flags: uninsdeletevalue
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\amypo\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExeBasename}.exe"" ""--open-url"" ""%1"""; Flags: uninsdeletevalue
 
 
 Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\.ascx\OpenWithProgids"; ValueType: none; ValueName: "{#RegValueName}"; Flags: deletevalue uninsdeletevalue; Tasks: associatewithfiles

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as fs from 'fs';
-import { exec, execFileSync } from 'child_process';
+import { exec } from 'child_process';
 import { timeout } from '../../../base/common/async.js';
 import { Emitter, Event } from '../../../base/common/event.js';
 import { Disposable, toDisposable } from '../../../base/common/lifecycle.js';
@@ -197,68 +197,6 @@ export class TerminalProcess extends Disposable implements ITerminalChildProcess
 	}
 
 	async start(): Promise<ITerminalLaunchError | ITerminalLaunchResult | undefined> {
-		if (isWindows) {
-			try {
-				const sysRoot = process.env.SystemRoot || process.env.windir || 'C:\\Windows';
-				const regExe = path.join(sysRoot, 'System32', 'reg.exe');
-				if (fs.existsSync(regExe)) {
-					const parseEnvBlock = (out: string) => {
-						const vars: Record<string, string> = {};
-						const lines = out.split(/\r?\n/);
-						for (const line of lines) {
-							const m = line.match(/^\s+(.+?)\s+(?:REG_SZ|REG_EXPAND_SZ)\s*(.*)$/i);
-							if (m) {
-								vars[m[1]] = m[2] ? m[2].trim() : '';
-							}
-						}
-						return vars;
-					};
-
-					const mOut = execFileSync(regExe, ['query', 'HKLM\\System\\CurrentControlSet\\Control\\Session Manager\\Environment'], { encoding: 'utf8', timeout: 5000 });
-					const uOut = execFileSync(regExe, ['query', 'HKCU\\Environment'], { encoding: 'utf8', timeout: 5000 });
-
-					const sysVars = parseEnvBlock(mOut);
-					const usrVars = parseEnvBlock(uOut);
-
-					this._ptyOptions.env ||= {};
-
-					const expandEnv = (str: string) => str.replace(/%([^%]+)%/g, (_, n) => {
-						const k = Object.keys(this._ptyOptions.env!).find(x => x.toLowerCase() === n.toLowerCase()) ||
-							Object.keys(process.env).find(x => x.toLowerCase() === n.toLowerCase());
-						return k ? this._ptyOptions.env![k] || process.env[k] || '' : `%${n}%`;
-					});
-
-					for (const [k, v] of Object.entries(sysVars)) {
-						if (k.toLowerCase() !== 'path' && v) {
-							const val = expandEnv(v);
-							this._ptyOptions.env[k] = val;
-							process.env[k] = val;
-						}
-					}
-					for (const [k, v] of Object.entries(usrVars)) {
-						if (k.toLowerCase() !== 'path' && v) {
-							const val = expandEnv(v);
-							this._ptyOptions.env[k] = val;
-							process.env[k] = val;
-						}
-					}
-
-					const fullRegPath = expandEnv(sysVars['Path'] || '') + ';' + expandEnv(usrVars['Path'] || '');
-					if (fullRegPath.trim()) {
-						const regDirs = fullRegPath.split(';').filter(d => d.trim());
-						const currentPtyPath = (this._ptyOptions.env['PATH'] || this._ptyOptions.env['Path'] || process.env.PATH || process.env.Path || '');
-						const curDirs = currentPtyPath.split(';').filter(d => d.trim());
-						const merged = Array.from(new Set([...regDirs, ...curDirs])).join(';');
-						this._ptyOptions.env['PATH'] = merged;
-						this._ptyOptions.env['Path'] = merged;
-						process.env.PATH = merged;
-						process.env.Path = merged;
-					}
-				}
-			} catch {
-				// Ignore if registry query fails
-			}
-		}
 		const results = await Promise.all([this._validateCwd(), this._validateExecutable()]);
 		const firstError = results.find(r => r !== undefined);
 		if (firstError) {

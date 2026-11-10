@@ -8,7 +8,6 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import axios from 'axios';
 import * as vscode from 'vscode';
-import { getFreshWindowsEnv } from './envService';
 import extract = require('extract-zip');
 
 const execAsync = promisify(exec);
@@ -77,8 +76,7 @@ export interface VerificationRequest {
  */
 export function execAllowFail(command: string, options: any = {}): Promise<{ stdout: string, stderr: string, exitCode: number }> {
 	return new Promise(resolve => {
-		const env = options.env || getFreshWindowsEnv();
-		exec(command, { ...options, env }, (error, stdout, stderr) => {
+		exec(command, options, (error, stdout, stderr) => {
 			resolve({
 				stdout: stdout ? stdout.toString() : '',
 				stderr: stderr ? stderr.toString() : '',
@@ -207,99 +205,8 @@ export function parseReactTestResults(output: string) {
 	return results;
 }
 
-function cleanAuthToken(t: string | undefined): string {
-	if (!t) return '';
-	let cleaned = t.trim();
-	if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
-		cleaned = cleaned.substring(1, cleaned.length - 1);
-	}
-	if (cleaned.startsWith('Bearer ')) {
-		cleaned = cleaned.substring(7).trim();
-	}
-	return cleaned;
-}
-
-function isValidZipBuffer(buf: any): boolean {
-	if (!buf || buf.byteLength < 4) return false;
-	const bytes = new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer || buf);
-	return bytes[0] === 0x50 && bytes[1] === 0x4B; // 'PK' magic bytes
-}
-
-const testcaseClient = axios.create();
-
-async function downloadProjectTestcase(backend_url: string, payload: any, token: string): Promise<any> {
-	const authToken = cleanAuthToken(token) || 'AmypoToken';
-	const tryReq = async (baseUrl: string, auth: string) => {
-		const cleanBase = baseUrl.replace(/\/+$/, '');
-		return testcaseClient.post(
-			`${cleanBase}/project-testcase`,
-			payload,
-			{
-				headers: {
-					'Accept': 'application/json',
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${auth}`,
-					'x-client-key': '9f3a7c1d5e8b2a6f4c0d7e1b9a3f6c8d2e5a7b1c4d9f0e6a3b8c2d5f7a1e9c0'
-				},
-				responseType: 'arraybuffer',
-				timeout: 30000
-			}
-		);
-	};
-
-	const requestWithFallback = async (baseUrl: string) => {
-		const fullUrl = `${baseUrl.replace(/\/+$/, '')}/project-testcase`;
-		console.log('====================================================');
-		console.log(`[Amypo Testcase] Request URL: ${fullUrl}`);
-		console.log(`[Amypo Testcase] Question ID: ${payload.question_id} | QB: ${payload.qb_name}`);
-		console.log('====================================================');
-
-		// 1. Try with AmypoToken (backend master token for testcases)
-		try {
-			const res = await tryReq(baseUrl, 'AmypoToken');
-			if (res.status === 200 && isValidZipBuffer(res.data)) {
-				console.log(`[Amypo Testcase] ✓ SUCCESS: Downloaded testcases from: ${fullUrl} | Size: ${(res.data.byteLength / 1024).toFixed(1)} KB`);
-				return res;
-			}
-		} catch (e: any) {
-			console.warn(`[Amypo Testcase] Fetch failed on ${fullUrl} with AmypoToken (status: ${e?.response?.status ?? e.message})`);
-		}
-
-		// 2. If user token provided and different, try with user token
-		if (authToken && authToken !== 'AmypoToken') {
-			try {
-				const res = await tryReq(baseUrl, authToken);
-				if (res.status === 200 && isValidZipBuffer(res.data)) {
-					console.log(`[Amypo Testcase] ✓ SUCCESS: Downloaded testcases with user token from: ${fullUrl} | Size: ${(res.data.byteLength / 1024).toFixed(1)} KB`);
-					return res;
-				}
-			} catch (e: any) {
-				console.warn(`[Amypo Testcase] Fetch failed on ${fullUrl} with user token (status: ${e?.response?.status ?? e.message})`);
-			}
-		}
-		throw new Error(`Failed to fetch valid testcase zip from ${baseUrl}`);
-	};
-
-	try {
-		return await requestWithFallback(backend_url);
-	} catch (err: any) {
-		if (backend_url.includes('1102amy21.amypo.ai')) {
-			console.log('[Amypo Testcase] Dev testcase missing or failed. Falling back to Production: https://endpoint.amypo.ai/api');
-			try {
-				return await requestWithFallback('https://endpoint.amypo.ai/api');
-			} catch { /* rethrow original error */ }
-		} else if (backend_url.includes('endpoint.amypo.ai')) {
-			console.log('[Amypo Testcase] Prod testcase missing or failed. Falling back to Development: https://1102amy21.amypo.ai/api');
-			try {
-				return await requestWithFallback('https://1102amy21.amypo.ai/api');
-			} catch { /* rethrow original error */ }
-		}
-		throw err;
-	}
-}
-
 export async function verifySpringBoot(request: VerificationRequest) {
-	let token = request.token || 'AmypoToken';
+	let token = 'AmypoToken'
 
 	const { project_path, question_id, qb_name, backend_url } = request;
 	const localDestPath = path.join(project_path, 'src', 'test', 'java', 'com', 'example', 'demo');
@@ -316,8 +223,23 @@ export async function verifySpringBoot(request: VerificationRequest) {
 
 		console.log("payload", payload);
 
-		// Step 1: Fetch test cases from API with fallback
-		const response = await downloadProjectTestcase(backend_url, payload, token);
+
+		// Step 1: Fetch test cases from API
+		const response = await axios.post(
+			`${backend_url}/project-testcase`,
+			payload,
+			{
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${token}`
+				},
+				responseType: 'arraybuffer'
+			}
+		);
+
+		if (response.status !== 200) {
+			throw new Error(`Failed to fetch testcase from backend. Status: ${response.status}`);
+		}
 
 		console.log('✓ Testcase fetched successfully', response);
 
@@ -327,8 +249,6 @@ export async function verifySpringBoot(request: VerificationRequest) {
 		}
 
 		const zipFilePath = path.join(project_path, 'testcases.zip');
-		console.log(`[Amypo Testcase File] Saving ZIP: ${zipFilePath}`);
-		console.log(`[Amypo Testcase File] Extracting Spring Boot testcases to: ${localDestPath}`);
 		fs.writeFileSync(zipFilePath, Buffer.from(response.data));
 
 		try {
@@ -394,7 +314,7 @@ export async function verifySpringBoot(request: VerificationRequest) {
 }
 
 export async function verifyReact(request: VerificationRequest) {
-	let token = request.token || 'AmypoToken';
+	let token = 'AmypoToken'
 	const { project_path, question_id, qb_name, backend_url } = request;
 	const localDestPath = path.join(project_path, 'src', 'testcase');
 	const localDeletePath = localDestPath;
@@ -407,8 +327,22 @@ export async function verifyReact(request: VerificationRequest) {
 			qb_name: qb_name,
 		};
 
-		// Step 1: Fetch test cases from API with fallback
-		const response = await downloadProjectTestcase(backend_url, payload, token);
+		// Step 1: Fetch test cases from API
+		const response = await axios.post(
+			`${backend_url}/project-testcase`,
+			payload,
+			{
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${token}`
+				},
+				responseType: 'arraybuffer'
+			}
+		);
+
+		if (response.status !== 200) {
+			throw new Error(`Failed to fetch testcase from backend. Status: ${response.status}`);
+		}
 
 		console.log('✓ Testcase fetched successfully');
 
@@ -418,8 +352,6 @@ export async function verifyReact(request: VerificationRequest) {
 		}
 
 		const zipFilePath = path.join(project_path, 'testcases_react.zip');
-		console.log(`[Amypo Testcase File] Saving ZIP: ${zipFilePath}`);
-		console.log(`[Amypo Testcase File] Extracting React testcases to: ${localDestPath}`);
 		fs.writeFileSync(zipFilePath, Buffer.from(response.data));
 
 		try {
@@ -483,7 +415,7 @@ export async function verifyReact(request: VerificationRequest) {
 }
 
 export async function verifyReactSpring(request: VerificationRequest) {
-	let token = request.token || 'AmypoToken';
+	let token = 'AmypoToken'
 	const { project_path, question_id, qb_name, backend_url } = request;
 	const springDeletePath = path.join(project_path, 'backend', 'src', 'test');
 	const reactDeletePath = path.join(project_path, 'frontend', 'src', 'testcase');
@@ -498,8 +430,18 @@ export async function verifyReactSpring(request: VerificationRequest) {
 			qb_name: qb_name,
 		};
 
-		// Step 1: Fetch test cases from API with fallback
-		const response = await downloadProjectTestcase(backend_url, payload, token);
+		// Step 1: Fetch test cases from API
+		const response = await axios.post(
+			`${backend_url}/project-testcase`,
+			payload,
+			{
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${token}`
+				},
+				responseType: 'arraybuffer'
+			}
+		);
 
 		console.log('response', response);
 
@@ -511,11 +453,9 @@ export async function verifyReactSpring(request: VerificationRequest) {
 		console.log('✓ Fullstack Testcase fetched successfully');
 
 		const zipFilePath = path.join(project_path, 'testcases_fullstack.zip');
-		const tempExtractPath = path.join(project_path, 'temp_testcases');
-		console.log(`[Amypo Testcase File] Saving ZIP: ${zipFilePath}`);
 		fs.writeFileSync(zipFilePath, Buffer.from(response.data));
 
-		console.log(`[Amypo Testcase File] Extracting Fullstack testcases to: ${tempExtractPath}`);
+		const tempExtractPath = path.join(project_path, 'temp_testcases');
 		if (!fs.existsSync(tempExtractPath)) fs.mkdirSync(tempExtractPath, { recursive: true });
 
 		try {
@@ -679,7 +619,7 @@ export async function verifyReactSpring(request: VerificationRequest) {
 }
 
 export async function verifySelenium(request: VerificationRequest) {
-	let token = request.token || 'AmypoToken';
+	let token = 'AmypoToken'
 	const { project_path, question_id, backend_url, qb_name } = request;
 	console.log(`[Amypo] Starting Local Selenium Verification for Question: ${question_id}`);
 	console.log(`[Amypo] project path: ${project_path}`);
@@ -689,11 +629,16 @@ export async function verifySelenium(request: VerificationRequest) {
 	try {
 		await hideTestFolder(project_path, '**/amypo_selenium_testcases', 'amypo_selenium_testcases');
 
-		// Step 1: Download JSON testing configuration with fallback
-		const response = await downloadProjectTestcase(backend_url, {
+		// Step 1: Download JSON testing configuration
+		const requestUrl = `${backend_url}/project-testcase`;
+		const response = await axios.post(requestUrl, {
 			question_id: question_id,
 			qb_name: qb_name
-		}, token);
+		}, {
+			headers: { 'Authorization': `Bearer ${token}` },
+			responseType: 'arraybuffer',
+			timeout: 30000
+		});
 
 		if (response.status !== 200) {
 			throw new Error(`Failed to fetch testcase from backend.`);
@@ -704,8 +649,6 @@ export async function verifySelenium(request: VerificationRequest) {
 		}
 
 		const zipFilePath = path.join(project_path, 'selenium_testcases.zip');
-		console.log(`[Amypo Testcase File] Saving ZIP: ${zipFilePath}`);
-		console.log(`[Amypo Testcase File] Extracting Selenium testcases to: ${localTestcaseDir}`);
 		fs.writeFileSync(zipFilePath, Buffer.from(response.data));
 
 		try {

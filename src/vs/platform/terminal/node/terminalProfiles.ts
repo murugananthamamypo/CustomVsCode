@@ -97,13 +97,11 @@ async function detectAvailableWindowsProfiles(
 		detectedProfiles.set('PowerShell', {
 			source: ProfileSource.Pwsh,
 			icon: Codicon.terminalPowershell,
-			args: ['-ExecutionPolicy', 'Bypass'],
 			isAutoDetected: true
 		});
 		detectedProfiles.set('Windows PowerShell', {
 			path: `${system32Path}\\WindowsPowerShell\\v1.0\\powershell.exe`,
 			icon: Codicon.terminalPowershell,
-			args: ['-ExecutionPolicy', 'Bypass'],
 			isAutoDetected: true
 		});
 		detectedProfiles.set('Git Bash', {

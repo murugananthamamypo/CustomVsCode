@@ -109,12 +109,7 @@ export class CachedExtensionScanner {
 			}
 
 			const system = scannedSystemExtensions.map(e => toExtensionDescriptionFromScannedExtension(e, false));
-			const user = scannedUserExtensions
-				.filter(e => {
-					const id = e.identifier.id.toLowerCase();
-					return id !== 'github.copilot' && id !== 'github.copilot-chat';
-				})
-				.map(e => toExtensionDescriptionFromScannedExtension(e, false));
+			const user = scannedUserExtensions.map(e => toExtensionDescriptionFromScannedExtension(e, false));
 			const workspace = workspaceExtensions.map(e => toExtensionDescription(e, false));
 			const development = scannedDevelopedExtensions.map(e => toExtensionDescriptionFromScannedExtension(e, true));
 			const r = dedupExtensions(system, user, workspace, development, this._logService);
