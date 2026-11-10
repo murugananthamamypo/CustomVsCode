@@ -1426,6 +1426,7 @@ export class DefaultRecommendedExtensionsView extends ExtensionsListView {
 			let langId = 0;
 			let token = '';
 			let testStarted = false;
+			let serverType = '';
 
 			if (rawExtState) {
 				try {
@@ -1433,19 +1434,20 @@ export class DefaultRecommendedExtensionsView extends ExtensionsListView {
 					langId = state['amypo.langId'] || 0;
 					token = state['amypo.token'] || '';
 					testStarted = state['amypo.testStarted'] === true || state['amypo.testStarted'] === 'true';
-					console.log('[Amypo] Found state - langId:', langId, 'hasToken:', !!token, 'testStarted:', testStarted);
+					serverType = state['amypo.serverType'] || '';
+					console.log('[Amypo] Found state - langId:', langId, 'serverType:', serverType, 'hasToken:', !!token, 'testStarted:', testStarted);
 				} catch (e) {
 					console.error('[Amypo] Error parsing storage:', e);
 				}
 			}
 
-			if (!langId || !token || !testStarted) {
-				console.log('[Amypo] No langId/token available or test not started — skipping fetch');
+			if (!langId || !token || !testStarted || !serverType) {
+				console.log('[Amypo] No langId/token/serverType available or test not started — skipping fetch');
 				return this.showEmptyModel();
 			}
 
 			// ✅ Fetch from server
-			const amypoRecommendedExtensions = await getAmypoRecommendedExtensions(langId, token, this.notificationService);
+			const amypoRecommendedExtensions = await getAmypoRecommendedExtensions(langId, token, this.notificationService, serverType);
 			console.log('[Amypo Debug] Server returned extensions:', amypoRecommendedExtensions);
 
 			if (!amypoRecommendedExtensions || amypoRecommendedExtensions.length === 0) {
@@ -1648,6 +1650,7 @@ export class SearchMarketplaceExtensionsView extends ExtensionsListView {
 		let testStarted = false;
 		let langId = 0;
 		let token = '';
+		let serverType = '';
 
 		if (rawExtState) {
 			try {
@@ -1655,12 +1658,13 @@ export class SearchMarketplaceExtensionsView extends ExtensionsListView {
 				testStarted = state['amypo.testStarted'] === true || state['amypo.testStarted'] === 'true';
 				langId = state['amypo.langId'] || 0;
 				token = state['amypo.token'] || '';
+				serverType = state['amypo.serverType'] || '';
 			} catch (e) {
 				// ignore
 			}
 		}
 
-		if (!testStarted) {
+		if (!testStarted || !serverType) {
 			const emptyModel = new PagedModel([]);
 			this.setModel(emptyModel, { text: localize('amypo.marketplaceDisabled', "Marketplace search is disabled until a test starts."), severity: Severity.Warning });
 			return emptyModel;
@@ -1668,7 +1672,7 @@ export class SearchMarketplaceExtensionsView extends ExtensionsListView {
 
 		try {
 			// ✅ Fetch recommended IDs from API
-			let recommendedIds = await getAmypoRecommendedExtensions(langId, token, this.notificationService);
+			let recommendedIds = await getAmypoRecommendedExtensions(langId, token, this.notificationService, serverType);
 
 			// ✅ Fix renamed extension IDs
 			recommendedIds = recommendedIds.map(id => {

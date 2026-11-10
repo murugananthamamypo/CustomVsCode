@@ -2,7 +2,7 @@
   "name": "amypo-question",
   "displayName": "Amypo Question Panel",
   "description": "Integrated Question Panel for Coding Problems.",
-  "version": "1.5.1",
+  "version": "1.5.6",
   "publisher": "AMYPO",
   "engines": {
     "vscode": "^1.85.0"

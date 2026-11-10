@@ -8,12 +8,14 @@ import { AmypoExtensionService } from './amypoExtensionService.js';
 export async function getAmypoRecommendedExtensions(
     langId: number,
     token: string,
-    notificationService?: INotificationService
+    notificationService?: INotificationService,
+    serverType?: string
 ): Promise<string[]> {
     return await AmypoExtensionService.getRecommendedExtensions(
         langId,
         token,
-        notificationService
+        notificationService,
+        serverType
     );
 }
 

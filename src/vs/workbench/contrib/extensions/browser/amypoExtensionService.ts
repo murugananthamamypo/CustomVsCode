@@ -3,14 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-const API_URL = 'https://endpoint.amypo.ai/api';
-
 let cachedExtensions: string[] | null = null;
+let cachedServerType: string | null = null;
 let cacheTimestamp: number = 0;
 const CACHE_TTL = 30 * 1000;
-
-
-
 
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 
@@ -19,18 +15,32 @@ export class AmypoExtensionService {
     static async getRecommendedExtensions(
         langId: number,
         token: string,
-        notificationService?: INotificationService
+        notificationService?: INotificationService,
+        serverType?: string
     ): Promise<string[]> {
 
+        const lower = (serverType ?? '').toLowerCase().trim();
+        const isDev = lower === 'dev' || lower === 'dv' || lower === 'development';
+        const isProd = lower === 'prod' || lower === 'produ' || lower === 'production';
+
+        if (!isDev && !isProd) {
+            console.log('[Amypo Extension] ❌ Missing or invalid serverType — skipping fetch');
+            return [];
+        }
+
+        const normalizedServerType = isDev ? 'dev' : 'prod';
+        const apiUrl = isDev ? 'https://1102amy21.amypo.ai/api' : 'https://endpoint.amypo.ai/api';
+
         const now = Date.now();
-        if (cachedExtensions !== null && (now - cacheTimestamp) < CACHE_TTL) {
+        if (cachedExtensions !== null && cachedServerType === normalizedServerType && (now - cacheTimestamp) < CACHE_TTL) {
             console.log('[Amypo Extension] Returning cached extensions:', cachedExtensions);
             return cachedExtensions;
         }
 
-        // ✅ Print lang_id and token
+        // ✅ Print lang_id, server_type, and token
         console.log('========================================');
         console.log('[Amypo Extension] Lang ID    :', langId);
+        console.log('[Amypo Extension] Server Type:', normalizedServerType);
         console.log('[Amypo Extension] Token      :', token ? token.substring(0, 20) + '...' : '❌ MISSING');
         console.log('========================================');
 
@@ -40,7 +50,7 @@ export class AmypoExtensionService {
         }
 
         try {
-            const url = `${API_URL}/project-get-extension/${langId}`;
+            const url = `${apiUrl}/project-get-extension/${langId}`;
             console.log('[Amypo Extension] Fetching URL:', url);
 
             const controller = new AbortController();
@@ -91,6 +101,7 @@ export class AmypoExtensionService {
                 console.log('========================================');
 
                 cachedExtensions = extensionIds;
+                cachedServerType = normalizedServerType;
                 cacheTimestamp = Date.now();
                 return extensionIds;
             }
@@ -106,6 +117,7 @@ export class AmypoExtensionService {
 
     static clearCache(): void {
         cachedExtensions = null;
+        cachedServerType = null;
         cacheTimestamp = 0;
         console.log('[Amypo] Cache cleared');
     }

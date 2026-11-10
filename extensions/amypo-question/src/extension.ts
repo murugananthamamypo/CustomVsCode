@@ -17,8 +17,50 @@ import { verifySpringBoot, verifyReact, verifyReactSpring, verifySelenium } from
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
-let server_type = 'prod';
-let API_URL = server_type === 'dev' ? 'https://1102amy21.amypo.ai/api' : 'https://endpoint.amypo.ai/api';
+
+function normalizeServerType(type: string | undefined | null): 'dev' | 'prod' | null {
+	const lower = (type ?? '').toLowerCase().trim();
+	if (lower === 'dev' || lower === 'dv' || lower === 'development') {
+		return 'dev';
+	}
+	if (lower === 'prod' || lower === 'produ' || lower === 'production') {
+		return 'prod';
+	}
+	return null;
+}
+
+function getApiUrl(type: string | undefined | null): string {
+	const normalized = normalizeServerType(type);
+	if (normalized === 'dev') {
+		return 'https://1102amy21.amypo.ai/api';
+	}
+	if (normalized === 'prod') {
+		return 'https://endpoint.amypo.ai/api';
+	}
+	return '';
+}
+
+function getStorageUrl(type: string | undefined | null): string {
+	const normalized = normalizeServerType(type);
+	if (normalized === 'dev') {
+		return 'https://1102amy21.amypo.ai/storage';
+	}
+	if (normalized === 'prod') {
+		return 'https://endpoint.amypo.ai/storage';
+	}
+	return '';
+}
+
+function getVersionUrl(type: string | undefined | null): string {
+	const normalized = normalizeServerType(type);
+	if (normalized === 'dev') {
+		return 'https://1102amy21.amypo.ai/storage/products/version.json';
+	}
+	return 'https://endpoint.amypo.ai/storage/products/version.json';
+}
+
+let server_type: string = '';
+let API_URL = '';
 
 let GITHUB_TOKEN = '';
 let GIT_URL = '';
@@ -37,8 +79,9 @@ async function checkForExtensionUpdate(context: vscode.ExtensionContext): Promis
 		console.log(`[Amypo Update] Current version: ${currentVersion}`);
 
 		// ── Fetch version.json from private server
+		const versionUrl = getVersionUrl(server_type);
 		const versionResp = await axios.get(
-			'https://endpoint.amypo.ai/storage/products/version.json',
+			versionUrl,
 			{
 				timeout: 5000,
 				validateStatus: (status) => status === 200
@@ -371,6 +414,15 @@ async function ensureGitInPath(): Promise<void> {
 export async function activate(context: vscode.ExtensionContext) {
 	console.log('[Amypo Question] Activating…');
 
+	// Immediately restore server_type from globalState if previously saved
+	const savedServerType = context.globalState.get<string>('amypo.serverType');
+	const restoredServerType = normalizeServerType(savedServerType);
+	if (restoredServerType) {
+		server_type = restoredServerType;
+		API_URL = getApiUrl(server_type);
+		console.log(`[Amypo] Initial server_type restored from globalState: ${server_type} (${API_URL})`);
+	}
+
 	// Refresh Windows PATH from Registry to resolve stale environment from protocol handler launch
 	try {
 		const registryPath = await refreshWindowsPathFromRegistry();
@@ -390,6 +442,17 @@ export async function activate(context: vscode.ExtensionContext) {
 		console.error('[Amypo] Error during Git PATH detection:', gitErr);
 	}
 
+	// Disable intrusive notifications from Java dependency / Copilot modernization during tests
+	try {
+		const javaDepConfig = vscode.workspace.getConfiguration('java.dependency');
+		if (javaDepConfig.get('enableDependencyCheckup') !== false) {
+			await javaDepConfig.update('enableDependencyCheckup', false, vscode.ConfigurationTarget.Global);
+			console.log('[Amypo] Disabled java.dependency.enableDependencyCheckup.');
+		}
+	} catch (confErr) {
+		console.warn('[Amypo] Failed to update java.dependency configuration:', confErr);
+	}
+
 	//  Auto-Update Check (blocking)
 	try {
 		const isUpdated = await checkForExtensionUpdate(context);
@@ -403,9 +466,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// No Recovery Logic needed for virtual drives anymore
 
+	let freshLaunchTimer: NodeJS.Timeout | undefined;
+
 	context.subscriptions.push(
 		vscode.window.registerUriHandler({
 			async handleUri(uri: vscode.Uri) {
+				if (freshLaunchTimer) {
+					clearTimeout(freshLaunchTimer);
+					freshLaunchTimer = undefined;
+				}
+
 				console.log('========================================');
 				console.log('[Amypo] Deep link received!');
 				console.log('[Amypo] Full URI:', uri.toString());
@@ -420,14 +490,15 @@ export async function activate(context: vscode.ExtensionContext) {
 				const test_type = parseInt(params.get('test_type') ?? '0');
 				let module_id = parseInt(params.get('module_id') ?? '0');
 				const token = params.get('token') ?? '';
-				server_type = params.get('server_type') ?? 'prod';
+				const rawServerType = params.get('server_type');
+				const normalizedServer = normalizeServerType(rawServerType);
 
 				console.log('[Amypo] Parsed Params:');
 				console.log('  allocation_id :', allocation_id);
 				console.log('  test_type     :', test_type);
 				console.log('  module_id     :', module_id);
 				console.log('  token         :', token);
-				console.log('  server_type   :', server_type);
+				console.log('  server_type   :', rawServerType, '->', normalizedServer);
 				console.log('========================================');
 				// eduViewProvider.updateView({
 				// 	course_name: 'Amypo coder',
@@ -435,14 +506,15 @@ export async function activate(context: vscode.ExtensionContext) {
 				// 	errorMessage: `Test details allocation_id : ${allocation_id} token: ${token} test_type: ${test_type} module_id: ${module_id} server_type: ${server_type}`
 				// }, () => { });
 
-				if (!allocation_id || !token) {
-					console.error('[Amypo] ERROR: Missing required params!');
-					vscode.window.showErrorMessage('Amypo: Invalid deep link — missing parameters.');
+				if (!allocation_id || !token || !normalizedServer) {
+					console.error('[Amypo] ERROR: Missing or invalid required params! allocation_id, token, and valid server_type (dev/dv or prod/produ) are required.');
+					vscode.window.showErrorMessage('Amypo: Invalid deep link — allocation_id, token, and a valid server_type (dev or prod) are required.');
 					return;
 				}
 
-				API_URL = server_type === 'dev' ? 'https://1102amy21.amypo.ai/api' : 'https://endpoint.amypo.ai/api';
-				context.globalState.update('amypo.serverType', server_type);
+				server_type = normalizedServer;
+				API_URL = getApiUrl(server_type);
+				await context.globalState.update('amypo.serverType', server_type);
 
 				console.log('[Amypo] All params valid — starting test...');
 
@@ -1648,7 +1720,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			console.log('[Amypo EduTech] Course:', course_details?.course_name);
 
-			const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.0.6';
+			const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.6';
 			const courseInfo = {
 				course_name: course_details?.course_name ?? 'N/A',
 				topic_name: topic_details?.topic_name ?? 'N/A',
@@ -1663,7 +1735,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				user_batch: user_details?.batch_name ?? 'N/A',
 				user_section: user_details?.section_name ?? 'N/A',
 				version: extVersion,
-				storageUrl: server_type === 'dev' ? 'https://1102amy21.amypo.ai/storage' : 'https://endpoint.amypo.ai/storage',
+				storageUrl: getStorageUrl(server_type),
 			};
 
 			// Date validation
@@ -1810,13 +1882,13 @@ export async function activate(context: vscode.ExtensionContext) {
 			console.error('[Amypo EduTech] getTestDetails error:', error);
 
 			const status = error?.response?.status;
-			let msg = 'Failed to fetch test details.';
+			let msg = error?.response?.data?.message || error?.message || 'Failed to fetch test details.';
 			if (status === 401) {
-				msg = 'Unauthorised: Invalid or expired token (401).';
+				msg = `Unauthorised: Invalid or expired token (401). Please verify your account/token is valid for the ${server_type} server.`;
 			} else if (status === 404) {
-				msg = 'Test not found (404).';
+				msg = `Test not found (404) on ${server_type} server. Please verify allocation_id ${allocation_id} exists on the ${server_type} database.`;
 			} else if (status === 500) {
-				msg = 'Server error (500). Please try again later.';
+				msg = `Server error (500) on ${server_type} server. Please try again later.`;
 			}
 
 			eduViewProvider.updateView({
@@ -2371,8 +2443,11 @@ export async function activate(context: vscode.ExtensionContext) {
 		currentRepoUrl = context.globalState.get<string>('amypo.repoUrl') ?? null;
 		currentProjectType = context.globalState.get<'react' | 'reactspring' | 'spring' | 'selenium'>('amypo.projectType') ?? 'spring';
 		activeToken = context.globalState.get<string>('amypo.token') ?? '';
-		server_type = context.globalState.get<string>('amypo.serverType') ?? 'prod';
-		API_URL = server_type === 'dev' ? 'https://1102amy21.amypo.ai/api' : 'https://endpoint.amypo.ai/api';
+		const restoredServer = normalizeServerType(context.globalState.get<string>('amypo.serverType'));
+		if (restoredServer) {
+			server_type = restoredServer;
+			API_URL = getApiUrl(server_type);
+		}
 
 		// 🔒 Security: restart the folder access monitor now that we know the project path
 		if (currentProjectPath) {
@@ -2428,7 +2503,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					console.log('[Amypo] Using cached course info (transition recovery)', savedCourseInfo);
 
 					if (savedCourseInfo) {
-						const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.0.6';
+						const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.6';
 						eduViewProvider.updateView({ ...savedCourseInfo, shouldRestore: true, version: extVersion }, () => { });
 						eduViewProvider.setOnReady(() => {
 							eduViewProvider.postMessage(cachedMsg);
@@ -2518,7 +2593,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 				const savedCourseInfo = context.globalState.get<any>('amypo.courseInfo');
 				if (savedCourseInfo) {
-					const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.0.6';
+					const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.6';
 					eduViewProvider.updateView({ ...savedCourseInfo, shouldRestore: true, version: extVersion }, () => { });
 					eduViewProvider.setOnReady(() => {
 						eduViewProvider.postMessage(questionMessage);
@@ -2545,7 +2620,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	} else {
 		// Fresh launch — wait for deep link or show error after timeout
-		setTimeout(() => {
+		freshLaunchTimer = setTimeout(() => {
 			if (!activeToken) {
 				console.log('[Amypo] No deep link received. Showing error view.');
 				eduViewProvider.updateView({
@@ -2669,6 +2744,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				await context.globalState.update('amypo.questionData', undefined);
 				await context.globalState.update('amypo.courseInfo', undefined);
 				await context.globalState.update('amypo.cachedQuestion', undefined);
+				await context.globalState.update('amypo.serverType', undefined);
 
 				// Virtual drive unmapping removed as it's no longer used
 				// await unmapVirtualDrive();
