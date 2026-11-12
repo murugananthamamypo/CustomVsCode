@@ -6,6 +6,17 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
 import * as https from 'https';
+
+function getUserAgent(): string {
+    const platform = process.platform;
+    if (platform === 'darwin') {
+        return 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 AmypoCoder';
+    } else if (platform === 'linux') {
+        return 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 AmypoCoder';
+    }
+    return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 AmypoCoder';
+}
+
 export interface ICourseInfo {
     course_name: string;
     topic_name?: string;
@@ -24,6 +35,7 @@ export interface ICourseInfo {
     user_batch?: string;
     user_section?: string;
     storageUrl?: string;
+    timer?: number;
 }
 
 export class EduViewProvider implements vscode.WebviewViewProvider {
@@ -97,9 +109,13 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     const pdfUrl = message.url;
                     if (pdfUrl) {
                         const agent = new https.Agent({ rejectUnauthorized: false });
-                        axios.get(pdfUrl, {
+                        axios.get(encodeURI(pdfUrl), {
                             responseType: 'arraybuffer',
-                            httpsAgent: agent
+                            httpsAgent: agent,
+                            headers: {
+                                'x-client-key': '9f3a7c1d5e8b2a6f4c0d7e1b9a3f6c8d2e5a7b1c4d9f0e6a3b8c2d5f7a1e9c0',
+                                'User-Agent': getUserAgent()
+                            }
                         })
                             .then(response => {
                                 const base64 = Buffer.from(response.data).toString('base64');
@@ -204,6 +220,22 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
             <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com; worker-src https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; frame-src https://1102amy21.amypo.ai https://endpoint.amypo.ai https://docs.google.com https://drive.google.com https://mozilla.github.io blob: data:; object-src 'none';">
             <script nonce="${nonce}" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
             <style>
+                :root {
+                    --amy-primary: #3b82f6;
+                    --amy-primary-hover: #2563eb;
+                    --amy-success: #10b981;
+                    --amy-success-hover: #059669;
+                    --amy-warning: #f59e0b;
+                    --amy-danger: #ef4444;
+                    --amy-border: var(--vscode-widget-border, rgba(128, 128, 128, 0.2));
+                    --amy-bg-card: var(--vscode-editorWidget-background, var(--vscode-sideBar-background, #1e1e1e));
+                    --amy-card-hover: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.05));
+                }
+
+                * {
+                    box-sizing: border-box;
+                }
+
                 html, body {
                     margin: 0;
                     padding: 0;
@@ -212,8 +244,28 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     overflow: hidden;
                     background: var(--vscode-editor-background);
                     color: var(--vscode-editor-foreground);
-                    font-family: var(--vscode-font-family);
+                    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
+                    font-size: 13px;
+                    line-height: 1.5;
                 }
+
+                /* Scrollbar styling */
+                ::-webkit-scrollbar {
+                    width: 6px;
+                    height: 6px;
+                }
+                ::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                ::-webkit-scrollbar-thumb {
+                    background: var(--vscode-scrollbarSlider-background, rgba(128, 128, 128, 0.25));
+                    border-radius: 4px;
+                }
+                ::-webkit-scrollbar-thumb:hover {
+                    background: var(--vscode-scrollbarSlider-hoverBackground, rgba(128, 128, 128, 0.4));
+                }
+
+                /* MODAL / WELCOME SCREEN */
                 #modal-wrapper {
                     position: absolute;
                     inset: 0;
@@ -222,56 +274,62 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     align-items: center;
                     overflow-y: auto;
                     padding: 24px;
-                    box-sizing: border-box;
+                    background: var(--vscode-editor-background);
+                    z-index: 100;
                 }
                 #modal-content {
-                    background: var(--vscode-editorWidget-background, white);
-                    color: var(--vscode-editorWidget-foreground, #2d3436);
+                    background: var(--amy-bg-card);
+                    color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+                    border: 1px solid var(--amy-border);
                     border-radius: 16px;
                     width: 100%;
-                    max-width: 400px;
-                    padding: 40px 24px;
+                    max-width: 480px;
+                    padding: 36px 32px;
                     text-align: center;
-                    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-                    animation: fadeIn 0.3s ease-out;
+                    box-shadow: 0 20px 48px rgba(0,0,0,0.25);
+                    animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
                 }
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: scale(0.95); }
-                    to { opacity: 1; transform: scale(1); }
+                @keyframes modalFadeIn {
+                    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+                    to { opacity: 1; transform: translateY(0) scale(1); }
                 }
                 .illustration {
-                    width: 100%;
-                    max-width: 160px;
+                    max-width: 150px;
                     height: auto;
-                    margin: 0 auto 24px;
+                    margin: 0 auto 20px;
                     display: block;
+                    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.15));
                 }
                 .title {
-                    font-size: 24px;
+                    font-size: 22px;
                     font-weight: 700;
-                    color: var(--vscode-editorWidget-foreground, #2d3436);
-                    margin-bottom: 4px;
+                    letter-spacing: -0.3px;
+                    color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+                    margin-bottom: 6px;
                     text-transform: capitalize;
                 }
                 .subtext {
-                    font-size: 15px;
-                    color: var(--vscode-descriptionForeground, #636e72);
+                    font-size: 14px;
+                    color: var(--vscode-descriptionForeground);
                     margin-bottom: 20px;
+                    font-weight: 500;
                 }
                 .languages {
                     display: flex;
                     flex-wrap: wrap;
                     justify-content: center;
                     gap: 6px;
-                    margin-bottom: 30px;
+                    margin-bottom: 26px;
                 }
                 .lang-tag {
-                    background: var(--vscode-badge-background, #f1f2f6);
-                    color: var(--vscode-badge-foreground, #2f3542);
+                    background: var(--vscode-badge-background, rgba(59, 130, 246, 0.15));
+                    color: var(--vscode-badge-foreground, var(--vscode-foreground));
                     padding: 4px 12px;
-                    border-radius: 6px;
-                    font-size: 12px;
+                    border-radius: 20px;
+                    font-size: 11px;
                     font-weight: 600;
+                    border: 1px solid var(--amy-border);
+                    letter-spacing: 0.3px;
                 }
                 .buttons {
                     display: flex;
@@ -279,325 +337,952 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     gap: 12px;
                     justify-content: center;
                 }
-                button {
+                .btn-start {
+                    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                    color: #ffffff;
                     padding: 12px 24px;
                     border-radius: 10px;
                     border: none;
-                    font-size: 15px;
+                    font-size: 14px;
                     font-weight: 600;
                     cursor: pointer;
-                    transition: all 0.2s;
-                    width: 100%;
+                    transition: all 0.2s ease;
+                    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+                    letter-spacing: 0.3px;
                 }
-                .btn-start {
-                    background: #00ce7a;
-                    color: white;
+                .btn-start:hover {
+                    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+                    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.4);
+                    transform: translateY(-1px);
                 }
-                .btn-start:hover { background: #00b36a; }
+                .btn-start:active {
+                    transform: translateY(0);
+                }
 
-                /* Guidelines Styles */
+                /* Guidelines */
                 .guidelines-title {
-                    font-size: 20px;
+                    font-size: 18px;
                     font-weight: 700;
-                    color: var(--vscode-editorWidget-foreground, #2d3436);
-                    margin-bottom: 24px;
+                    color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+                    margin-bottom: 20px;
                     text-align: center;
+                    letter-spacing: -0.2px;
                 }
                 .guidelines-list {
                     list-style: none;
                     padding: 0;
-                    margin: 0;
-                    font-size: 14px;
-                    color: var(--vscode-descriptionForeground, #636e72);
+                    margin: 0 0 24px 0;
+                    font-size: 13px;
+                    color: var(--vscode-descriptionForeground);
                     text-align: left;
-                    max-height: 350px;
+                    max-height: 320px;
                     overflow-y: auto;
-                    margin-bottom: 24px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
                 }
                 .guidelines-list li {
-                    margin-bottom: 16px;
                     display: flex;
                     align-items: flex-start;
                     line-height: 1.5;
+                    background: rgba(128, 128, 128, 0.05);
+                    padding: 10px 14px;
+                    border-radius: 8px;
+                    border: 1px solid var(--amy-border);
                 }
                 .bullet-icon {
                     min-width: 8px;
                     height: 8px;
-                    background-color: #00ce7a;
+                    background-color: var(--amy-success);
                     border-radius: 50%;
                     margin-right: 12px;
                     margin-top: 6px;
+                    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
                 }
 
-                /* Question UI Styles */
+                /* QUESTION UI SHELL */
                 #question-ui {
                     display: none;
                     position: absolute;
                     inset: 0;
                     flex-direction: column;
                     overflow: hidden;
-                    background-color: var(--vscode-editor-background, #f1f2f6);
+                    background-color: var(--vscode-editor-background);
                 }
-                /* Inherit general background */
-                .topbar { background-color: var(--vscode-editor-background, white); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--vscode-widget-border, #dfe4ea); }
-                .topbar-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-                .logo { height: 24px; }
-                .info-pill { font-size: 13px; color: var(--vscode-foreground, #636e72); display: flex; align-items: center; gap: 8px; border-left: 1px solid var(--vscode-widget-border, #dfe4ea); padding-left: 16px; font-weight: 500; }
-                .icon-btn { border: 1px solid var(--vscode-widget-border, #dfe4ea); border-radius: 50%; padding: 4px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; }
-                .icon-btn.yellow { border-color: #ffd32a; color: #ffa801; }
-                .main-layout {
-                    position: absolute;
-                    top: 53px;
-                    bottom: 60px;
-                    left: 0;
-                    right: 0;
-                    overflow: hidden;
+
+                /* MODERN HEADER & TOPBAR */
+                .topbar {
+                    background: var(--vscode-editorWidget-background, var(--amy-bg-card));
+                    padding: 8px 14px;
                     display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    border-bottom: 1px solid var(--amy-border);
+                    gap: 10px;
+                    flex-shrink: 0;
+                    position: relative;
+                    z-index: 50;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
                 }
-                .content-area { flex: 1; background: var(--vscode-editor-background); margin: 12px; border-radius: 8px; border: 1px solid var(--vscode-widget-border, #dfe4ea); display: flex; flex-direction: column; overflow: hidden; }
-                .content-header { padding: 0 12px; border-bottom: 1px solid var(--vscode-widget-border, #f1f2f6); display: flex; justify-content: space-between; align-items: center; background: var(--vscode-editorWidget-background, #fbfbfb); border-radius: 8px 8px 0 0; }
-                .tab-container { display: flex; gap: 4px; height: 100%; align-items: stretch; }
-                .tab-btn {
-                    padding: 12px 16px;
-                    cursor: pointer;
-                    font-size: 13px;
-                    font-weight: 600;
-                    color: var(--vscode-foreground, #636e72);
-                    border-bottom: 2px solid transparent;
-                    transition: all 0.2s;
+                .topbar-left {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    min-width: 0;
+                    flex-wrap: wrap;
+                }
+                .logo-container {
                     display: flex;
                     align-items: center;
                     gap: 8px;
+                    text-decoration: none;
                 }
-                .tab-btn:hover { color: #00b894; background: rgba(0, 184, 148, 0.05); }
-                .tab-btn.active { color: #00b894; border-bottom-color: #00b894; background: rgba(0, 184, 148, 0.1); }
-                .report-btn { color: #ff7675; border: 1px solid #fab1a0; border-radius: 6px; padding: 6px 16px; background: transparent; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s; }
-                .report-btn:hover { background-color: var(--vscode-list-hoverBackground, #ffeaa7); }
+                .logo {
+                    height: 22px;
+                    width: auto;
+                    display: block;
+                    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+                }
+                .breadcrumb-wrapper {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    font-size: 12px;
+                    color: var(--vscode-descriptionForeground);
+                    border-left: 1px solid var(--amy-border);
+                    padding-left: 10px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .breadcrumb-course {
+                    font-weight: 600;
+                    color: var(--vscode-foreground);
+                    max-width: 140px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .breadcrumb-divider {
+                    opacity: 0.5;
+                }
+                .breadcrumb-module {
+                    color: var(--vscode-descriptionForeground);
+                    max-width: 120px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
 
-                .question-body { padding: 24px; flex: 1; overflow-y: auto; color: var(--vscode-editor-foreground); user-select: none; -webkit-user-select: none; }
-                #src-view { flex: 1; display: none; overflow: hidden; background: var(--vscode-editor-background); position: relative; user-select: none; -webkit-user-select: none; }
+                .topbar-right {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-shrink: 0;
+                }
+
+                /* Modern Chips / Meta pills in Header */
+                .meta-chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 5px;
+                    padding: 4px 9px;
+                    background: rgba(128, 128, 128, 0.08);
+                    border: 1px solid var(--amy-border);
+                    border-radius: 6px;
+                    font-size: 11px;
+                    font-weight: 500;
+                    color: var(--vscode-foreground);
+                    cursor: pointer;
+                    user-select: none;
+                    transition: all 0.15s ease;
+                }
+                .meta-chip:hover {
+                    background: var(--amy-card-hover);
+                    border-color: var(--vscode-focusBorder, var(--amy-primary));
+                }
+                .meta-chip .chip-caret {
+                    font-size: 8px;
+                    opacity: 0.6;
+                    margin-left: 2px;
+                }
+
+                /* Assessment Timer Pill */
+                .timer-pill {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    background: rgba(16, 185, 129, 0.1);
+                    border: 1px solid rgba(16, 185, 129, 0.3);
+                    color: var(--vscode-foreground);
+                    padding: 4px 10px;
+                    border-radius: 20px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    letter-spacing: 0.5px;
+                    font-family: var(--vscode-editor-font-family, monospace);
+                }
+                .timer-pulse {
+                    width: 7px;
+                    height: 7px;
+                    background-color: var(--amy-success);
+                    border-radius: 50%;
+                    box-shadow: 0 0 8px var(--amy-success);
+                    animation: pulseDot 2s infinite ease-in-out;
+                }
+                @keyframes pulseDot {
+                    0%, 100% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.4; transform: scale(0.85); }
+                }
+
+                /* Version Tag */
+                .version-tag {
+                    font-size: 10px;
+                    background: rgba(59, 130, 246, 0.12);
+                    color: #60a5fa;
+                    border: 1px solid rgba(59, 130, 246, 0.25);
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                    font-weight: 700;
+                    letter-spacing: 0.3px;
+                }
+
+                /* Tooltip Card Popovers (Anchored to right, high z-index, solid background) */
+                .tooltip-container {
+                    position: relative;
+                }
+                .tooltip-content {
+                    display: none;
+                    position: absolute;
+                    top: calc(100% + 6px);
+                    right: 0;
+                    left: auto;
+                    background: var(--vscode-editorWidget-background, #ffffff);
+                    color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+                    border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.3));
+                    border-radius: 8px;
+                    box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+                    padding: 14px 16px;
+                    z-index: 1000;
+                    font-size: 12px;
+                    min-width: 250px;
+                    max-width: 320px;
+                    animation: tooltipFadeIn 0.15s ease-out;
+                }
+                @keyframes tooltipFadeIn {
+                    from { opacity: 0; transform: translateY(-4px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                .tooltip-container:hover .tooltip-content,
+                .tooltip-container:focus-within .tooltip-content {
+                    display: block;
+                }
+                .tooltip-title {
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: var(--vscode-foreground);
+                    margin-bottom: 10px;
+                    padding-bottom: 6px;
+                    border-bottom: 1px solid var(--amy-border);
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                }
+                .tooltip-grid {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                }
+                .tooltip-row {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 8px;
+                    line-height: 1.4;
+                }
+                .tooltip-row .k {
+                    color: var(--vscode-descriptionForeground);
+                    font-weight: 500;
+                    white-space: nowrap;
+                }
+                .tooltip-row .v {
+                    color: var(--vscode-foreground);
+                    font-weight: 600;
+                    text-align: right;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
+                /* MAIN LAYOUT */
+                .main-layout {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                    position: relative;
+                    margin: 10px 12px 68px 12px;
+                    z-index: 1;
+                }
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                    position: relative;
+                    margin: 10px 12px 68px 12px;
+                }
+                .content-area {
+                    flex: 1;
+                    background: var(--vscode-editor-background);
+                    border-radius: 10px;
+                    border: 1px solid var(--amy-border);
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+                }
+
+                /* MODERN NAVIGATION & SEGMENTED TABS */
+                .content-header {
+                    padding: 8px 12px;
+                    border-bottom: 1px solid var(--amy-border);
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    background: var(--amy-bg-card);
+                    border-radius: 10px 10px 0 0;
+                    gap: 8px;
+                }
+                .tab-segment-group {
+                    display: flex;
+                    align-items: center;
+                    background: rgba(128, 128, 128, 0.1);
+                    padding: 3px;
+                    border-radius: 8px;
+                    gap: 2px;
+                }
+                .tab-btn {
+                    padding: 6px 14px;
+                    cursor: pointer;
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: var(--vscode-descriptionForeground);
+                    border-radius: 6px;
+                    border: none;
+                    background: transparent;
+                    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    user-select: none;
+                }
+                .tab-btn:hover {
+                    color: var(--vscode-foreground);
+                    background: rgba(128, 128, 128, 0.08);
+                }
+                .tab-btn.active {
+                    color: var(--vscode-foreground);
+                    background: var(--vscode-editor-background);
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+                }
+                .tab-badge {
+                    font-size: 9px;
+                    padding: 1px 6px;
+                    border-radius: 10px;
+                    background: rgba(59, 130, 246, 0.18);
+                    color: #60a5fa;
+                    font-weight: 700;
+                }
+
+                .header-actions {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                }
+                .icon-action-btn {
+                    padding: 5px 9px;
+                    border-radius: 6px;
+                    border: 1px solid var(--amy-border);
+                    background: transparent;
+                    color: var(--vscode-foreground);
+                    font-size: 11px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 5px;
+                    transition: all 0.15s ease;
+                }
+                .icon-action-btn:hover {
+                    background: var(--amy-card-hover);
+                    border-color: var(--vscode-focusBorder, var(--amy-primary));
+                }
+
+                /* QUESTION BODY */
+                .question-body {
+                    padding: 20px;
+                    flex: 1;
+                    overflow-y: auto;
+                    color: var(--vscode-editor-foreground);
+                    user-select: none;
+                    -webkit-user-select: none;
+                }
+                .q-header-row {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    gap: 12px;
+                    margin-bottom: 18px;
+                    padding-bottom: 14px;
+                    border-bottom: 1px solid var(--amy-border);
+                }
+                .q-title {
+                    font-size: 20px;
+                    font-weight: 700;
+                    letter-spacing: -0.3px;
+                    line-height: 1.3;
+                    margin: 0;
+                    color: var(--vscode-foreground);
+                }
+                .marks-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    background: rgba(245, 158, 11, 0.12);
+                    color: #fbbf24;
+                    border: 1px solid rgba(245, 158, 11, 0.3);
+                    border-radius: 6px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    white-space: nowrap;
+                }
+
+                .q-description {
+                    font-size: 13.5px;
+                    line-height: 1.7;
+                    margin-bottom: 24px;
+                    overflow-wrap: break-word;
+                    color: var(--vscode-editor-foreground);
+                }
+                .q-description *, .q-title * {
+                    color: var(--vscode-editor-foreground) !important;
+                }
+                .q-description img {
+                    max-width: 100%;
+                    height: auto;
+                    margin: 16px 0 24px 0;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+                    display: block !important;
+                    float: none !important;
+                    border: 1px solid var(--amy-border);
+                }
+                .q-description ul, .q-description ol {
+                    padding-left: 22px;
+                    margin-bottom: 16px;
+                }
+                .q-description li {
+                    margin-bottom: 6px;
+                    line-height: 1.6;
+                }
+                .q-description table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 18px 0;
+                    border-radius: 6px;
+                    overflow: hidden;
+                    border: 1px solid var(--amy-border);
+                }
+                .q-description th {
+                    background: rgba(128, 128, 128, 0.1);
+                    font-weight: 600;
+                    border: 1px solid var(--amy-border);
+                    padding: 8px 12px;
+                    text-align: left;
+                }
+                .q-description td {
+                    border: 1px solid var(--amy-border);
+                    padding: 8px 12px;
+                    text-align: left;
+                }
+                .q-description pre {
+                    background: rgba(0, 0, 0, 0.25);
+                    border: 1px solid var(--amy-border);
+                    padding: 14px;
+                    border-radius: 8px;
+                    overflow-x: auto;
+                    margin: 16px 0;
+                    font-family: var(--vscode-editor-font-family, monospace);
+                    font-size: 12.5px;
+                    line-height: 1.5;
+                }
+                .q-description code {
+                    font-family: var(--vscode-editor-font-family, monospace);
+                    background: rgba(128, 128, 128, 0.15);
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                }
+
+                /* SRS VIEW */
+                #src-view {
+                    flex: 1;
+                    display: none;
+                    overflow: hidden;
+                    background: var(--vscode-editor-background);
+                    position: relative;
+                    user-select: none;
+                    -webkit-user-select: none;
+                }
                 .srs-toolbar {
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
-                    padding: 8px 16px;
-                    background: var(--vscode-editorWidget-background, #2d2d2d);
-                    border-bottom: 1px solid var(--vscode-widget-border, #3c3c3c);
+                    padding: 8px 14px;
+                    background: var(--amy-bg-card);
+                    border-bottom: 1px solid var(--amy-border);
                     position: relative;
                     z-index: 70;
-                    gap: 16px;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                    gap: 12px;
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
                 }
                 .srs-toolbar-group {
                     display: flex;
                     align-items: center;
-                    gap: 8px;
+                    gap: 6px;
                 }
                 .srs-btn {
-                    background: var(--vscode-button-secondaryBackground, #3a3a3a);
-                    color: var(--vscode-button-secondaryForeground, #ffffff);
-                    border: 1px solid var(--vscode-widget-border, #555555);
-                    border-radius: 4px;
+                    background: rgba(128, 128, 128, 0.1);
+                    color: var(--vscode-foreground);
+                    border: 1px solid var(--amy-border);
+                    border-radius: 6px;
                     padding: 2px 8px;
                     cursor: pointer;
                     font-size: 12px;
                     font-weight: 600;
-                    display: flex;
+                    display: inline-flex;
                     align-items: center;
                     justify-content: center;
                     min-width: 28px;
                     height: 28px;
-                    box-sizing: border-box;
-                    transition: background 0.2s;
+                    transition: all 0.15s ease;
                 }
                 .srs-btn:hover {
-                    background: var(--vscode-button-secondaryHoverBackground, #4a4a4a);
+                    background: var(--amy-card-hover);
+                    border-color: var(--vscode-focusBorder, var(--amy-primary));
                 }
                 .srs-zoom-val {
-                    font-size: 12px;
+                    font-size: 11.5px;
                     font-weight: 700;
-                    min-width: 48px;
+                    min-width: 44px;
                     text-align: center;
-                    color: var(--vscode-foreground, #cccccc);
+                    color: var(--vscode-foreground);
+                    font-family: var(--vscode-editor-font-family, monospace);
                 }
                 .srs-search-input {
-                    background: var(--vscode-input-background, #1e1e1e);
-                    color: var(--vscode-input-foreground, #cccccc);
-                    border: 1px solid var(--vscode-input-border, #3c3c3c);
-                    border-radius: 4px;
-                    padding: 4px 8px;
+                    background: var(--vscode-input-background, rgba(0,0,0,0.1));
+                    color: var(--vscode-input-foreground, var(--vscode-foreground));
+                    border: 1px solid var(--vscode-input-border, var(--amy-border));
+                    border-radius: 6px;
+                    padding: 4px 10px;
                     font-size: 12px;
                     height: 28px;
                     width: 140px;
-                    box-sizing: border-box;
                     outline: none;
+                    transition: border-color 0.15s;
                 }
                 .srs-search-input:focus {
-                    border-color: var(--vscode-focusBorder, #00b894);
+                    border-color: var(--vscode-focusBorder, var(--amy-primary));
                 }
                 .srs-search-results {
                     font-size: 11px;
-                    color: var(--vscode-descriptionForeground, #888888);
-                    min-width: 70px;
+                    color: var(--vscode-descriptionForeground);
+                    min-width: 60px;
                     text-align: center;
                 }
-                .q-title { font-size: 24px; font-weight: bold; margin-bottom: 24px; }
-                .q-description { font-size: 15px; line-height: 1.6; margin-bottom: 32px; overflow-wrap: break-word; }
-                .q-description *, .q-title * { color: var(--vscode-editor-foreground) !important; }
-                .q-description img { max-width: 100%; height: auto; margin: 20px 0 32px 0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: block !important; float: none !important; }
-                .q-description ul, .q-description ol { padding-left: 24px; margin-bottom: 16px; overflow: hidden; }
-                .q-description li { margin-bottom: 8px; }
-                .q-description table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-                .q-description th, .q-description td { border: 1px solid var(--vscode-widget-border, #dfe4ea); padding: 8px 12px; text-align: left; }
-                .q-description pre { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; overflow-x: auto; margin: 16px 0; font-family: var(--vscode-editor-font-family, monospace); }
-                .q-description code { font-family: var(--vscode-editor-font-family, monospace); background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 4px; }
 
+                /* MODERN ACTION BAR */
                 .action-bar {
                     position: absolute;
                     bottom: 0;
                     left: 0;
                     right: 0;
+                    height: 60px;
                     display: flex;
-                    gap: 12px;
-                    padding: 12px;
-                    background: var(--vscode-editor-background);
-                    border-top: 1px solid var(--vscode-widget-border);
-                    box-sizing: border-box;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 10px;
+                    padding: 8px 12px;
+                    background: var(--amy-bg-card);
+                    border-top: 1px solid var(--amy-border);
+                    box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
+                    z-index: 50;
                 }
+                .action-bar-left {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex: 1;
+                }
+                .action-bar-right {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex: 1;
+                    justify-content: flex-end;
+                }
+
                 .btn-action {
                     flex: 1;
-                    padding: 10px;
-                    border-radius: 6px;
-                    border: 1px solid var(--vscode-widget-border, #dfe4ea);
-                    background: var(--vscode-button-secondaryBackground, #f1f2f6);
-                    color: var(--vscode-button-secondaryForeground, #2d3436);
-                    font-size: 13px;
+                    height: 42px;
+                    padding: 0 12px;
+                    border-radius: 8px;
+                    border: 1px solid var(--amy-border);
+                    background: rgba(128, 128, 128, 0.08);
+                    color: var(--vscode-foreground);
+                    font-size: 12.5px;
                     font-weight: 600;
                     cursor: pointer;
-                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                    display: flex;
+                    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                    display: inline-flex;
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
                     gap: 2px;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                    user-select: none;
+                    text-decoration: none;
                 }
-                .btn-action:hover {
-                    background: var(--vscode-button-secondaryHoverBackground, #dfe4ea);
+                .btn-action:hover:not(:disabled) {
+                    background: var(--amy-card-hover);
+                    border-color: var(--vscode-focusBorder, var(--amy-primary));
                     transform: translateY(-1px);
-                    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+                    box-shadow: 0 3px 8px rgba(0,0,0,0.12);
                 }
-                .btn-action:active { transform: translateY(0); }
-                .btn-primary { background: #3867d6; color: white; border: none; }
-                .btn-primary:hover { background: #2b52ad; }
-                .btn-success { background: #00ce7a; color: white; border: none; }
-                .btn-success:hover { background: #00b36a; }
+                .btn-action:active:not(:disabled) {
+                    transform: translateY(0);
+                }
                 .btn-action:disabled {
-                    opacity: 0.6;
+                    opacity: 0.55;
                     cursor: not-allowed;
                     transform: none !important;
                     box-shadow: none !important;
                 }
-                .save-time {
-                    font-size: 12px;
-                    opacity: 0.9;
-                    font-weight: 400;
-                    margin-top: -2px;
+
+                .btn-action .btn-inner-row {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
                 }
 
+                /* Primary Verification Button */
+                .btn-verify {
+                    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+                    color: #ffffff !important;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+                }
+                .btn-verify:hover:not(:disabled) {
+                    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+                    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+                }
+
+                /* Final Submit Button */
+                .btn-submit {
+                    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+                    color: #ffffff !important;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    box-shadow: 0 2px 8px rgba(234, 88, 12, 0.3);
+                }
+                .btn-submit:hover:not(:disabled) {
+                    background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+                    box-shadow: 0 4px 14px rgba(234, 88, 12, 0.45);
+                }
+
+                .save-time {
+                    font-size: 10px;
+                    opacity: 0.8;
+                    font-weight: 400;
+                    margin-top: -1px;
+                }
+
+                /* STATUS NOTIFICATIONS */
                 .status-msg {
                     position: fixed;
-                    top: 60px;
-                    right: 24px;
+                    top: 56px;
+                    right: 20px;
                     z-index: 9999;
-                    font-size: 13px;
+                    font-size: 12.5px;
                     font-weight: 600;
                     display: none;
-                    padding: 12px 20px;
+                    padding: 10px 16px;
                     border-radius: 8px;
-                    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-                    animation: slideIn 0.3s ease-out;
-                    max-width: 300px;
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+                    animation: slideInNotification 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+                    max-width: 320px;
                 }
-                @keyframes slideIn {
-                    from { transform: translateX(50px); opacity: 0; }
+                @keyframes slideInNotification {
+                    from { transform: translateX(40px); opacity: 0; }
                     to { transform: translateX(0); opacity: 1; }
                 }
-                .status-msg.success { display: block; background: #00ce7a; color: white; border: none; }
-                .status-msg.error { display: block; background: #ff5e5e; color: white; border: none; }
-                .status-msg.info { display: block; background: #3867d6; color: white; border: none; }
+                .status-msg.success { display: block; background: #059669; color: white; border: none; }
+                .status-msg.error { display: block; background: #dc2626; color: white; border: none; }
+                .status-msg.info { display: block; background: #2563eb; color: white; border: none; }
 
-                .loader-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--vscode-descriptionForeground, #636e72); }
-                .spinner { border: 4px solid var(--vscode-widget-border, rgba(0,0,0,0.1)); width: 36px; height: 36px; border-radius: 50%; border-left-color: #0984e3; animation: spin 1s linear infinite; margin-bottom: 16px; }
+                /* SPINNERS & LOADERS */
+                .loader-container {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100%;
+                    color: var(--vscode-descriptionForeground);
+                }
+                .spinner {
+                    border: 3px solid var(--amy-border);
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 50%;
+                    border-left-color: var(--amy-primary);
+                    animation: amySpin 0.9s linear infinite;
+                    margin-bottom: 14px;
+                }
                 .btn-spinner {
                     width: 12px;
                     height: 12px;
-                    border: 2px solid rgba(0, 0, 0, 0.1);
+                    border: 2px solid rgba(255, 255, 255, 0.3);
                     border-radius: 50%;
-                    border-top-color: currentColor;
-                    animation: spin 0.8s linear infinite;
+                    border-top-color: #ffffff;
+                    animation: amySpin 0.8s linear infinite;
                     display: none;
                 }
-                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                @keyframes amySpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-                .tooltip-container { position: relative; display: inline-block; cursor: pointer; }
-                .tooltip-content {
-                    display: none; position: absolute; top: 100%; left: 0; margin-top: 8px;
-                    background: var(--vscode-editorWidget-background, white);
-                    color: var(--vscode-editor-foreground, black); border: 1px solid var(--vscode-widget-border, #ccc);
-                    padding: 12px 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    z-index: 100; font-size: 13px; font-weight: normal; white-space: normal; line-height: 1.6; width: 250px;
+                /* VERIFICATION TERMINAL OVERLAY */
+                .verify-overlay {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(0, 0, 0, 0.6);
+                    backdrop-filter: blur(4px);
+                    z-index: 9999;
+                    display: none;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
                 }
-                .tooltip-content p { margin: 4px 0; }
-                .tooltip-container:hover .tooltip-content,
-                .tooltip-container:focus-within .tooltip-content { display: block; }
-
-                .verify-text { font-size: 15px; color: var(--vscode-descriptionForeground, #636e72); font-weight: 500; text-align: center; }
-
-                /* Verification Loader Overlay */
-                .verify-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(2px); z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; }
-                .verify-modal { background: var(--vscode-editorWidget-background, white); padding: 40px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; width: 90%; max-width: 600px; animation: fadeIn 0.3s ease-out; }
-                .verify-terminal { background: #0b0c16; border-radius: 8px; padding: 24px; width: 100%; max-width: 400px; height: 160px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); display: flex; flex-direction: column; gap: 8px; font-family: monospace; font-size: 13px; color: #4a6fe3; margin-bottom: 24px; position: relative; overflow: hidden; }
+                .verify-modal {
+                    background: var(--amy-bg-card);
+                    padding: 32px;
+                    border-radius: 14px;
+                    border: 1px solid var(--amy-border);
+                    box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    max-width: 520px;
+                    animation: modalFadeIn 0.3s ease-out;
+                }
+                .verify-terminal {
+                    background: #090d16;
+                    border: 1px solid rgba(255,255,255,0.08);
+                    border-radius: 10px;
+                    padding: 20px;
+                    width: 100%;
+                    height: 170px;
+                    box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    font-family: var(--vscode-editor-font-family, monospace);
+                    font-size: 12.5px;
+                    color: #60a5fa;
+                    margin-bottom: 20px;
+                    position: relative;
+                    overflow: hidden;
+                }
                 .verify-term-line { display: none; }
-                .verify-term-line.active { display: block; animation: fadeIn 0.3s ease-out forwards; }
-                .verify-term-line.current { color: #8bb2ff; text-shadow: 0 0 8px #8bb2ff; position: relative; }
-                .verify-term-line.current::after { content: ''; position: absolute; top: 50%; left: -10px; right: -10px; height: 140%; transform: translateY(-50%); background: linear-gradient(90deg, transparent, rgba(74, 111, 227, 0.4), transparent); z-index: 0; animation: scan 2s infinite linear; }
-                .verify-term-line span { position: relative; z-index: 1; }
-                @keyframes scan { 0% { background-position: -200px 0; } 100% { background-position: 200px 0; } }
-                .verify-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(139, 178, 255, 0.3); border-radius: 50%; border-top-color: #8bb2ff; animation: spin 0.8s linear infinite; margin-left: 8px; vertical-align: middle; }
+                .verify-term-line.active { display: block; animation: modalFadeIn 0.25s ease-out forwards; }
+                .verify-term-line.current { color: #93c5fd; text-shadow: 0 0 8px rgba(147, 197, 253, 0.6); position: relative; }
+                .verify-spinner {
+                    display: inline-block;
+                    width: 11px;
+                    height: 11px;
+                    border: 2px solid rgba(147, 197, 253, 0.3);
+                    border-radius: 50%;
+                    border-top-color: #93c5fd;
+                    animation: amySpin 0.8s linear infinite;
+                    margin-left: 8px;
+                    vertical-align: middle;
+                }
+                .verify-text {
+                    font-size: 14px;
+                    color: var(--vscode-foreground);
+                    font-weight: 600;
+                    text-align: center;
+                }
 
-                /* Results Modal */
-                .result-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 10000; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 40px 20px; }
-                .result-modal { margin: auto; background: #fff; width: 100%; max-width: 900px; border-radius: 8px; position: relative; display: flex; flex-direction: column; animation: fadeIn 0.3s ease-out; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
-                .result-close { position: absolute; right: 20px; top: 15px; cursor: pointer; font-size: 24px; color: #666; font-weight: 300; line-height: 1; }
-                .result-close:hover { color: #333; }
-                .result-header { background: #eef2f7; border-radius: 8px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #2d3436; font-weight: 600; margin-bottom: 25px; font-size: 14px; }
-                .result-header i { font-style: normal; display: flex; align-items: center; justify-content: center; background: #00d2be; color: white; width: 22px; height: 22px; border-radius: 4px; font-size: 12px; }
+                /* RESULTS MODAL (THEME-AWARE) */
+                .result-overlay {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(0,0,0,0.6);
+                    backdrop-filter: blur(3px);
+                    z-index: 10000;
+                    display: none;
+                    align-items: flex-start;
+                    justify-content: center;
+                    overflow-y: auto;
+                    padding: 30px 16px;
+                }
+                .result-modal {
+                    margin: auto;
+                    background: var(--amy-bg-card);
+                    color: var(--vscode-foreground);
+                    border: 1px solid var(--amy-border);
+                    width: 100%;
+                    max-width: 840px;
+                    border-radius: 14px;
+                    position: relative;
+                    display: flex;
+                    flex-direction: column;
+                    animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                    padding: 28px;
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+                }
+                .result-close {
+                    position: absolute;
+                    right: 18px;
+                    top: 16px;
+                    cursor: pointer;
+                    font-size: 20px;
+                    width: 30px;
+                    height: 30px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: var(--vscode-descriptionForeground);
+                    transition: all 0.15s ease;
+                }
+                .result-close:hover {
+                    background: rgba(128, 128, 128, 0.15);
+                    color: var(--vscode-foreground);
+                }
+                .result-header {
+                    background: rgba(128, 128, 128, 0.08);
+                    border: 1px solid var(--amy-border);
+                    border-radius: 8px;
+                    padding: 10px 14px;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    color: var(--vscode-foreground);
+                    font-weight: 600;
+                    margin-bottom: 20px;
+                    font-size: 13px;
+                }
+                .result-section-label {
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: var(--vscode-foreground);
+                    margin-bottom: 14px;
+                    text-align: left;
+                    width: 100%;
+                }
+                .result-cards {
+                    display: grid;
+                    grid-template-columns: repeat(4, 1fr);
+                    gap: 12px;
+                    margin-bottom: 24px;
+                    width: 100%;
+                }
+                .result-card {
+                    border: 1px solid var(--amy-border);
+                    border-radius: 10px;
+                    padding: 16px 10px;
+                    text-align: center;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                    background: rgba(128, 128, 128, 0.05);
+                }
+                .result-card-val {
+                    font-size: 26px;
+                    font-weight: 800;
+                    color: var(--vscode-foreground);
+                    font-family: var(--vscode-editor-font-family, monospace);
+                }
+                .result-card-label {
+                    font-size: 11px;
+                    color: var(--vscode-descriptionForeground);
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                .result-card.passed {
+                    border-color: rgba(16, 185, 129, 0.3);
+                    background: rgba(16, 185, 129, 0.08);
+                }
+                .result-card.passed .result-card-val,
+                .result-card.passed .result-card-label {
+                    color: #10b981;
+                }
+                .result-card.failed {
+                    border-color: rgba(239, 68, 68, 0.3);
+                    background: rgba(239, 68, 68, 0.08);
+                }
+                .result-card.failed .result-card-val,
+                .result-card.failed .result-card-label {
+                    color: #ef4444;
+                }
+                .result-card.score {
+                    border-color: rgba(245, 158, 11, 0.3);
+                    background: rgba(245, 158, 11, 0.08);
+                }
+                .result-card.score .result-card-val,
+                .result-card.score .result-card-label {
+                    color: #f59e0b;
+                }
 
-                .result-section-label { font-size: 16px; font-weight: 700; color: #212529; margin-bottom: 20px; text-align: left; width: 100%; }
-                .result-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 30px; width: 100%; }
-                .result-card { border: 1px solid #e9ecef; border-radius: 12px; padding: 20px 10px; text-align: center; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
-                .result-card-val { font-size: 28px; font-weight: 800; color: #2d3436; }
-                .result-card-label { font-size: 13px; color: #868e96; font-weight: 600; }
+                .terminal-box {
+                    border: 1px solid var(--amy-border);
+                    border-radius: 8px;
+                    padding: 14px;
+                    background: rgba(0, 0, 0, 0.25);
+                    color: var(--vscode-foreground);
+                    font-family: var(--vscode-editor-font-family, monospace);
+                    font-size: 12px;
+                    min-height: 80px;
+                    max-height: 260px;
+                    overflow-y: auto;
+                    text-align: left;
+                    width: 100%;
+                }
+                .terminal-empty {
+                    color: var(--vscode-descriptionForeground);
+                    text-align: center;
+                    padding: 20px;
+                }
 
-                .result-card.passed { border-color: #d3f9d8; background: #f4fff7; }
-                .result-card.passed .result-card-val { color: #00ce7a; }
-                .result-card.passed .result-card-label { color: #00ce7a; }
-
-                .result-card.failed { border-color: #ffe3e3; background: #fff5f5; }
-                .result-card.failed .result-card-val { color: #ff5e5e; }
-                .result-card.failed .result-card-label { color: #ff5e5e; }
-
-                .result-card.score { border-color: #fff9db; background: #fffdf2; }
-                .result-card.score .result-card-val { color: #fab005; }
-                .result-card.score .result-card-label { color: #fab005; }
-
-                .terminal-box { border: 1px solid #eee; border-radius: 8px; padding: 20px; background: #fff; color: #636e72; font-family: 'Courier New', monospace; font-size: 13px; min-height: 100px; max-height: 300px; overflow-y: auto; text-align: left; width: 100%; box-sizing: border-box; }
-                .terminal-empty { color: #adb5bd; text-align: center; margin-top: 10px; }
-
+                /* RESPONSIVE QUERIES */
                 @media (max-width: 600px) {
-                    .topbar { flex-direction: column; gap: 8px; }
-                    .content-header { flex-direction: column; gap: 8px; align-items: flex-start; }
+                    .topbar {
+                        padding: 8px 12px;
+                        gap: 8px;
+                    }
+                    .breadcrumb-wrapper {
+                        display: none;
+                    }
+                    .result-cards {
+                        grid-template-columns: repeat(2, 1fr);
+                    }
+                    .action-bar {
+                        padding: 6px 8px;
+                        gap: 6px;
+                    }
+                    .btn-action {
+                        font-size: 11.5px;
+                        padding: 0 6px;
+                    }
                 }
             </style>
         </head>
@@ -610,14 +1295,14 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                         <div class="title">${courseInfo.module_name}</div>
                         <div class="subtext">${courseInfo.course_name}</div>
                         ${languagesHtml}
-                        ${courseInfo.errorMessage ? `<div style="color: #e17055; margin-top: 16px; font-weight: 600; text-align: center; border: 1px solid #fab1a0; padding: 12px; border-radius: 8px; background: #fff5f5;">${courseInfo.errorMessage}</div>` :
+                        ${courseInfo.errorMessage ? `<div style="color: #ef4444; margin-top: 16px; font-weight: 600; text-align: center; border: 1px solid rgba(239, 68, 68, 0.3); padding: 12px; border-radius: 8px; background: rgba(239, 68, 68, 0.08);">${courseInfo.errorMessage}</div>` :
                 `<div class="buttons">
-                            <button class="btn-start" id="start">Start Test</button>
+                            <button class="btn-start" id="start">Start Assessment</button>
                         </div>`}
                     </div>
 
                     <div id="step2" style="display: none;">
-                        <div class="guidelines-title">Test Guidelines</div>
+                        <div class="guidelines-title">Assessment Guidelines</div>
                         <ul class="guidelines-list">
                             <li><div class="bullet-icon"></div><div>To ensure optimal performance during the test, we recommend using the latest version of Google Chrome (version 60 or above).</div></li>
                             <li><div class="bullet-icon"></div><div>Your computer system must maintain steady and uninterrupted internet connectivity. For a smooth testing experience, both your download and upload speeds should be at least 2 Mbps.</div></li>
@@ -626,7 +1311,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                             <li><div class="bullet-icon"></div><div>Notifications or pop-ups appearing during the test will be interpreted as tab switches, which may cause your test to close prematurely. It is strongly advised to turn off these distractions before starting.</div></li>
                         </ul>
                         <div class="buttons">
-                            <button class="btn-start" id="continue">Continue</button>
+                            <button class="btn-start" id="continue">I Agree & Continue</button>
                         </div>
                     </div>
                 </div>
@@ -636,57 +1321,86 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
             <div id="question-ui" style="${courseInfo.shouldRestore ? 'display: flex;' : ''}">
                 <div class="topbar">
                     <div class="topbar-left">
-                        <img src="${logoUri}" alt="Amypo" class="logo">
-                        <div class="info-pill">User Details :
-                            <div class="tooltip-container">
-                                <div class="icon-btn" tabindex="0">👁</div>
-                                <div class="tooltip-content">
-                                    <p><b>Name :</b> ${courseInfo.user_name}</p>
-                                    <p><b>Email :</b> ${courseInfo.user_email}</p>
-                                    <p><b>Roll No :</b> ${courseInfo.user_roll_no}</p>
-                                    <p><b>College :</b> ${courseInfo.user_college}</p>
-                                    <p><b>Department :</b> ${courseInfo.user_department}</p>
-                                    <p><b>Batch :</b> ${courseInfo.user_batch}</p>
-                                    <p><b>Section :</b> ${courseInfo.user_section}</p>
-                                </div>
-                            </div>
+                        <div class="logo-container">
+                            <img src="${logoUri}" alt="Amypo" class="logo">
                         </div>
-                        <div class="info-pill">Course Details :
-                            <div class="tooltip-container">
-                                <div class="icon-btn" tabindex="0">👁</div>
-                                <div class="tooltip-content">
-                                    <p><b>Course Name :</b> ${courseInfo.course_name}</p>
-                                    <p><b>Test Type :</b> ${courseInfo.test_type}</p>
-                                    <p><b>Topic Name :</b> ${courseInfo.topic_name}</p>
-                                    <p><b>Module Name :</b> ${courseInfo.module_name}</p>
-                                </div>
-                            </div>
+                        <div class="breadcrumb-wrapper" title="${courseInfo.course_name} / ${courseInfo.module_name}">
+                            <span class="breadcrumb-course">${courseInfo.course_name || 'Course'}</span>
+                            <span class="breadcrumb-divider">/</span>
+                            <span class="breadcrumb-module">${courseInfo.module_name || 'Module'}</span>
                         </div>
                     </div>
 
-                <div class="topbar-right" style="display:flex;align-items:center;gap:8px;">
-                        <span style="font-size:10px;
-                            background:#1e40af;
-                            color: #cbd5e1;
-                            padding:3px 12px;
-                            border-radius:20px;
-                            font-weight:700;
-                            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                            letter-spacing: 0.5px;">
+                    <div class="topbar-right">
+                        <!-- Live Assessment Timer -->
+                        <div class="timer-pill" id="test-timer-badge" title="Assessment Duration">
+                            <span class="timer-pulse"></span>
+                            <span style="font-size: 11px;">⏱️</span>
+                            <span id="test-timer-display">00:00:00</span>
+                        </div>
+
+                        <!-- User Profile Popover -->
+                        <div class="tooltip-container">
+                            <div class="meta-chip" tabindex="0">
+                                <span>👤</span>
+                                <span>${courseInfo.user_name ? courseInfo.user_name.split(' ')[0] : 'Candidate'}</span>
+                                <span class="chip-caret">▾</span>
+                            </div>
+                            <div class="tooltip-content">
+                                <div class="tooltip-title"><span>👤</span> Candidate Profile</div>
+                                <div class="tooltip-grid">
+                                    <div class="tooltip-row"><span class="k">Name</span><span class="v">${courseInfo.user_name || 'N/A'}</span></div>
+                                    <div class="tooltip-row"><span class="k">Email</span><span class="v">${courseInfo.user_email || 'N/A'}</span></div>
+                                    <div class="tooltip-row"><span class="k">Roll No</span><span class="v">${courseInfo.user_roll_no || 'N/A'}</span></div>
+                                    <div class="tooltip-row"><span class="k">College</span><span class="v">${courseInfo.user_college || 'N/A'}</span></div>
+                                    <div class="tooltip-row"><span class="k">Department</span><span class="v">${courseInfo.user_department || 'N/A'}</span></div>
+                                    <div class="tooltip-row"><span class="k">Batch / Sec</span><span class="v">${(courseInfo.user_batch || '-') + ' / ' + (courseInfo.user_section || '-')}</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Course Meta Popover -->
+                        <div class="tooltip-container">
+                            <div class="meta-chip" tabindex="0">
+                                <span>📚</span>
+                                <span>Details</span>
+                                <span class="chip-caret">▾</span>
+                            </div>
+                            <div class="tooltip-content">
+                                <div class="tooltip-title"><span>📚</span> Assessment Overview</div>
+                                <div class="tooltip-grid">
+                                    <div class="tooltip-row"><span class="k">Course</span><span class="v">${courseInfo.course_name || 'N/A'}</span></div>
+                                    <div class="tooltip-row"><span class="k">Topic</span><span class="v">${courseInfo.topic_name || 'N/A'}</span></div>
+                                    <div class="tooltip-row"><span class="k">Module</span><span class="v">${courseInfo.module_name || 'N/A'}</span></div>
+                                    <div class="tooltip-row"><span class="k">Test Type</span><span class="v">${courseInfo.test_type || 'Assessment'}</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Version Tag -->
+                        <span class="version-tag">
                             v${courseInfo.version ?? '1.0.6'}
                         </span>
+                    </div>
                 </div>
 
                 <div class="main-layout">
                     <div class="content-area">
                         <div class="content-header">
-                            <div class="tab-container">
-                                <div class="tab-btn active" id="tab-q">
+                            <div class="tab-segment-group">
+                                <button class="tab-btn active" id="tab-q">
                                     <span>📋</span> Question
-                                </div>
-                                <div class="tab-btn" id="tab-src" style="display: none;">
-                                    <span>📄</span> SRS
-                                </div>
+                                </button>
+                                <button class="tab-btn" id="tab-src" style="display: none;">
+                                    <span>📄</span> SRS Spec
+                                    <span class="tab-badge">PDF</span>
+                                </button>
+                            </div>
+
+                            <div class="header-actions">
+                                <button class="icon-action-btn" id="view-res-btn" style="display: none;" title="Open Test Results">
+                                    <span>📊</span> Results
+                                </button>
                             </div>
                         </div>
 
@@ -698,14 +1412,19 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                             </div>
 
                             <!-- Error -->
-                            <div id="error-view" style="display: none; color: #e17055; text-align: center; margin-top: 40px; padding: 24px;">
+                            <div id="error-view" style="display: none; color: #ef4444; text-align: center; margin-top: 40px; padding: 24px;">
                                 <h2 id="error-msg">Failed to load test.</h2>
                             </div>
 
                             <!-- Content -->
                             <div id="data-view" style="display: none; height: 100%; flex-direction: column;">
-                                <div id="q-content" style="flex: 1; overflow-y: auto; padding: 24px;">
-                                    <div class="q-title" id="q-title"></div>
+                                <div id="q-content" style="flex: 1; overflow-y: auto; padding: 20px;">
+                                    <div class="q-header-row">
+                                        <div class="q-title" id="q-title">Loading Question...</div>
+                                        <div class="marks-badge" id="q-marks-badge" style="display: none;">
+                                            <span>✨</span> <span id="q-marks-val">0</span> Marks
+                                        </div>
+                                    </div>
                                     <div class="q-description" id="q-desc"></div>
                                 </div>
 
@@ -727,41 +1446,52 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                         <button class="srs-btn" id="srs-search-next" title="Next match">▼</button>
                                     </div>
                                 </div>
-                                <div id="src-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--vscode-descriptionForeground, #636e72); position: absolute; inset: 0; background: var(--vscode-editor-background); z-index: 10;">
+                                <div id="src-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--vscode-descriptionForeground); position: absolute; inset: 0; background: var(--vscode-editor-background); z-index: 10;">
                                     <div class="spinner"></div>
                                     <div style="font-weight: 500;">Loading SRS document...</div>
                                 </div>
-                                <div id="pdf-container" style="flex: 1; overflow: auto; padding: 20px; background: var(--vscode-editor-background); display: none; flex-direction: column;"></div>
+                                <div id="pdf-container" style="flex: 1; overflow: auto; padding: 16px; background: var(--vscode-editor-background); display: none; flex-direction: column;"></div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ✅ action-bar inside question-ui -->
+                <!-- Modern Action Bar -->
                 <div class="action-bar">
-                    <button class="btn-action" id="save-btn">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="btn-spinner" id="save-spinner"></div>
-                            <span>💾 Save</span>
-                        </div>
-                        <div>
-                            <span>Last Saved : </span>
-                            <span class="save-time" id="last-saved-time"></span>
-                        </div>
-                    </button>
-                    <button class="btn-action btn-success" id="pull-btn">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="btn-spinner" id="pull-spinner"></div>
-                            <span>Pull</span>
-                        </div>
-                    </button>
-                    <button class="btn-action btn-primary" id="verify-btn"><span>Check Verify</span></button>
-                    <button class="btn-action btn-success" id="submit-btn" style="background: #e67e22; border-color: #d35400;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="btn-spinner" id="submit-spinner"></div>
-                            <span>Final Submit</span>
-                        </div>
-                    </button>
+                    <div class="action-bar-left">
+                        <button class="btn-action" id="save-btn" title="Save workspace state to cloud">
+                            <div class="btn-inner-row">
+                                <div class="btn-spinner" id="save-spinner"></div>
+                                <span>💾 Save</span>
+                            </div>
+                            <div class="save-time">
+                                <span>Saved: </span><span id="last-saved-time">ready</span>
+                            </div>
+                        </button>
+                        <button class="btn-action" id="pull-btn" title="Pull latest changes from remote repository">
+                            <div class="btn-inner-row">
+                                <div class="btn-spinner" id="pull-spinner"></div>
+                                <span>⬇️ Pull</span>
+                            </div>
+                            <span class="save-time">Sync code</span>
+                        </button>
+                    </div>
+
+                    <div class="action-bar-right">
+                        <button class="btn-action btn-verify" id="verify-btn" title="Run tests and verify implementation">
+                            <div class="btn-inner-row">
+                                <span>⚡ Check Verify</span>
+                            </div>
+                            <span class="save-time">Run testcases</span>
+                        </button>
+                        <button class="btn-action btn-submit" id="submit-btn" title="Final submission of your assessment">
+                            <div class="btn-inner-row">
+                                <div class="btn-spinner" id="submit-spinner"></div>
+                                <span>🚀 Final Submit</span>
+                            </div>
+                            <span class="save-time">Grade assessment</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Verification Loader UI -->
@@ -784,7 +1514,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     <div class="result-modal">
                         <div class="result-close" id="result-close">&times;</div>
                         <div class="result-header">
-                            <i>[]</i> Test result
+                            <span>📊</span> Test Results Overview
                         </div>
 
                         <div class="result-section-label">Test Results Summary</div>
@@ -808,55 +1538,55 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                         </div>
 
                         <div id="res-test-cases-section" style="display: none; margin-bottom: 25px; width: 100%;">
-                            <div style="display: flex; gap: 20px; width: 100%; box-sizing: border-box;">
+                            <div style="display: flex; gap: 16px; width: 100%; box-sizing: border-box;">
                                 <div style="flex: 1; min-width: 0;">
-                                    <div class="result-section-label" style="font-size: 14px; margin-bottom: 10px;">Passed Tests</div>
-                                    <div class="terminal-box" id="res-passed-tests" style="min-height: 50px; max-height: 150px; overflow-y: auto; overflow-wrap: break-word; background: #f8f9fa;">None</div>
+                                    <div class="result-section-label" style="font-size: 13px; margin-bottom: 8px;">Passed Tests</div>
+                                    <div class="terminal-box" id="res-passed-tests" style="min-height: 50px; max-height: 150px; overflow-y: auto; overflow-wrap: break-word; color: #10b981;">None</div>
                                 </div>
                                 <div style="flex: 1; min-width: 0;">
-                                    <div class="result-section-label" style="font-size: 14px; margin-bottom: 10px;">Failed Tests</div>
-                                    <div class="terminal-box" id="res-failed-tests" style="min-height: 50px; max-height: 150px; overflow-y: auto; overflow-wrap: break-word; background: #fff5f5;">None</div>
+                                    <div class="result-section-label" style="font-size: 13px; margin-bottom: 8px;">Failed Tests</div>
+                                    <div class="terminal-box" id="res-failed-tests" style="min-height: 50px; max-height: 150px; overflow-y: auto; overflow-wrap: break-word; color: #ef4444;">None</div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- FULLSTACK BREAKDOWN -->
                         <div id="res-fs-cases-section" style="display: none; margin-bottom: 25px; width: 100%;">
-                            <h4 style="margin-top: 10px; color: #333; font-size: 14px; font-weight: 600;">Spring Boot Test Results</h4>
-                            <div style="display: flex; gap: 20px; width: 100%; box-sizing: border-box; margin-bottom: 15px;">
+                            <h4 style="margin: 10px 0 6px 0; font-size: 13px; font-weight: 600;">Spring Boot Test Results</h4>
+                            <div style="display: flex; gap: 16px; width: 100%; box-sizing: border-box; margin-bottom: 15px;">
                                 <div style="flex: 1; min-width: 0;">
-                                    <div class="result-section-label" style="font-size: 12px; margin-bottom: 5px;">Passed Tests</div>
-                                    <div class="terminal-box" id="res-fs-spring-passed" style="min-height: 40px; max-height: 100px; overflow-y: auto; overflow-wrap: break-word; background: #f8f9fa;">None</div>
+                                    <div class="result-section-label" style="font-size: 11px; margin-bottom: 5px;">Passed Tests</div>
+                                    <div class="terminal-box" id="res-fs-spring-passed" style="min-height: 40px; max-height: 100px; overflow-y: auto; overflow-wrap: break-word; color: #10b981;">None</div>
                                 </div>
                                 <div style="flex: 1; min-width: 0;">
-                                    <div class="result-section-label" style="font-size: 12px; margin-bottom: 5px;">Failed Tests</div>
-                                    <div class="terminal-box" id="res-fs-spring-failed" style="min-height: 40px; max-height: 100px; overflow-y: auto; overflow-wrap: break-word; background: #fff5f5;">None</div>
-                                </div>
-                            </div>
-
-                            <h4 style="margin-top: 10px; color: #333; font-size: 14px; font-weight: 600;">React Test Results</h4>
-                            <div style="display: flex; gap: 20px; width: 100%; box-sizing: border-box; margin-bottom: 15px;">
-                                <div style="flex: 1; min-width: 0;">
-                                    <div class="result-section-label" style="font-size: 12px; margin-bottom: 5px;">Passed Tests</div>
-                                    <div class="terminal-box" id="res-fs-react-passed" style="min-height: 40px; max-height: 100px; overflow-y: auto; overflow-wrap: break-word; background: #f8f9fa;">None</div>
-                                </div>
-                                <div style="flex: 1; min-width: 0;">
-                                    <div class="result-section-label" style="font-size: 12px; margin-bottom: 5px;">Failed Tests</div>
-                                    <div class="terminal-box" id="res-fs-react-failed" style="min-height: 40px; max-height: 100px; overflow-y: auto; overflow-wrap: break-word; background: #fff5f5;">None</div>
+                                    <div class="result-section-label" style="font-size: 11px; margin-bottom: 5px;">Failed Tests</div>
+                                    <div class="terminal-box" id="res-fs-spring-failed" style="min-height: 40px; max-height: 100px; overflow-y: auto; overflow-wrap: break-word; color: #ef4444;">None</div>
                                 </div>
                             </div>
 
-                            <div class="result-header"><i>[]</i> Spring Boot Terminal Output</div>
-                            <div class="terminal-box" id="res-fs-spring-terminal" style="max-height: 200px; overflow-y: auto;"></div>
+                            <h4 style="margin: 10px 0 6px 0; font-size: 13px; font-weight: 600;">React Test Results</h4>
+                            <div style="display: flex; gap: 16px; width: 100%; box-sizing: border-box; margin-bottom: 15px;">
+                                <div style="flex: 1; min-width: 0;">
+                                    <div class="result-section-label" style="font-size: 11px; margin-bottom: 5px;">Passed Tests</div>
+                                    <div class="terminal-box" id="res-fs-react-passed" style="min-height: 40px; max-height: 100px; overflow-y: auto; overflow-wrap: break-word; color: #10b981;">None</div>
+                                </div>
+                                <div style="flex: 1; min-width: 0;">
+                                    <div class="result-section-label" style="font-size: 11px; margin-bottom: 5px;">Failed Tests</div>
+                                    <div class="terminal-box" id="res-fs-react-failed" style="min-height: 40px; max-height: 100px; overflow-y: auto; overflow-wrap: break-word; color: #ef4444;">None</div>
+                                </div>
+                            </div>
 
-                            <div class="result-header" style="margin-top: 15px;"><i>[]</i> React Terminal Output</div>
-                            <div class="terminal-box" id="res-fs-react-terminal" style="max-height: 200px; overflow-y: auto;"></div>
+                            <div class="result-header"><span>☕</span> Spring Boot Terminal Output</div>
+                            <div class="terminal-box" id="res-fs-spring-terminal" style="max-height: 180px; overflow-y: auto;"></div>
+
+                            <div class="result-header" style="margin-top: 14px;"><span>⚛️</span> React Terminal Output</div>
+                            <div class="terminal-box" id="res-fs-react-terminal" style="max-height: 180px; overflow-y: auto;"></div>
                         </div>
 
                         <!-- STANDARD FALLBACK -->
                         <div id="standard-terminal-section" style="display: block;">
                             <div class="result-header">
-                                <i>[]</i> Terminal Output
+                                <span>💻</span> Terminal Output
                             </div>
                             <div class="terminal-box" id="res-terminal">No output from Terminal</div>
                         </div>
@@ -871,6 +1601,37 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                 let currentQData = null;
                 const storageUrl = "${courseInfo.storageUrl || ''}";
                 const vscode = acquireVsCodeApi();
+
+                // Live Timer Logic
+                let timerElapsedSeconds = 0;
+                let timerIntervalId = null;
+
+                function initAssessmentTimer(startSec = 0) {
+                    timerElapsedSeconds = startSec;
+                    if (timerIntervalId) clearInterval(timerIntervalId);
+                    updateTimerUI();
+                    timerIntervalId = setInterval(() => {
+                        timerElapsedSeconds++;
+                        updateTimerUI();
+                    }, 1000);
+                }
+
+                function updateTimerUI() {
+                    const el = document.getElementById('test-timer-display');
+                    if (!el) return;
+                    const h = String(Math.floor(timerElapsedSeconds / 3600)).padStart(2, '0');
+                    const m = String(Math.floor((timerElapsedSeconds % 3600) / 60)).padStart(2, '0');
+                    const s = String(timerElapsedSeconds % 60).padStart(2, '0');
+                    el.innerText = h + ':' + m + ':' + s;
+                }
+
+                // Cloud Sync Indicator
+                function setSyncStatus(state, label) {
+                    const dot = document.getElementById('sync-dot');
+                    const lbl = document.getElementById('sync-label');
+                    if (dot) dot.className = 'sync-indicator ' + state;
+                    if (lbl && label) lbl.innerText = label;
+                }
 
                 function switchTab(tab) {
                     const tabQ = document.getElementById('tab-q');
@@ -912,9 +1673,12 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                     const pdfFile = tc.src[0];
                                     let pdfPath = tc.path;
 
-                                    const baseUrl = storageUrl.endsWith('/') ? storageUrl.slice(0, -1) : storageUrl;
-                                    const cleanPath = pdfPath.startsWith('/') ? pdfPath : '/' + pdfPath;
-                                    const fullUrl = baseUrl + cleanPath + pdfFile;
+                                    const origin = storageUrl.split('/').slice(0, 3).join('/');
+                                    const pathSegments = pdfPath.split('/').filter(Boolean);
+                                    if (pathSegments.length > 0 && pathSegments[0] === 'storage') {
+                                        pathSegments.shift();
+                                    }
+                                    const fullUrl = origin + '/storage/' + pathSegments.join('/') + '/' + pdfFile;
 
                                     console.log('[Amypo] Requesting PDF from extension host:', fullUrl);
 
@@ -925,7 +1689,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                         const loaderText = srcLoader.querySelector('div:nth-child(2)');
                                         if (loaderText) {
                                             loaderText.innerText = 'Loading SRS document...';
-                                            loaderText.style.color = 'var(--vscode-descriptionForeground, #636e72)';
+                                            loaderText.style.color = 'var(--vscode-descriptionForeground)';
                                         }
                                         const spinner = srcLoader.querySelector('.spinner');
                                         if (spinner) {
@@ -958,7 +1722,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                 const loaderText = srcLoader.querySelector('div:nth-child(2)');
                                 if (loaderText) {
                                     loaderText.innerText = 'SRS document is not available for this project.';
-                                    loaderText.style.color = 'var(--vscode-descriptionForeground, #636e72)';
+                                    loaderText.style.color = 'var(--vscode-descriptionForeground)';
                                 }
                                 const spinner = srcLoader.querySelector('.spinner');
                                 if (spinner) {
@@ -986,6 +1750,13 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     resClose.onclick = () => { if(resOverlay) resOverlay.style.display = 'none'; };
                 }
 
+                const viewResBtn = document.getElementById('view-res-btn');
+                if (viewResBtn) {
+                    viewResBtn.onclick = () => {
+                        if (resOverlay) resOverlay.style.display = 'flex';
+                    };
+                }
+
                 const startBtn = document.getElementById('start');
                 if (startBtn) {
                     startBtn.onclick = () => {
@@ -1001,7 +1772,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     };
                 }
 
-                const reloadBtn = document.getElementById('reload');
+                const reloadBtn = document.getElementById('reload-btn');
                 if (reloadBtn) {
                     reloadBtn.onclick = () => {
                         vscode.postMessage({ command: 'reload' });
@@ -1018,6 +1789,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                             status.innerText = 'Saving...';
                         }
 
+                        setSyncStatus('syncing', 'Syncing...');
                         saveBtn.disabled = true;
                         document.getElementById('save-spinner').style.display = 'block';
 
@@ -1063,6 +1835,9 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                 const submitBtn = document.getElementById('submit-btn');
                 if (submitBtn) {
                     submitBtn.onclick = () => {
+                        const confirmSubmit = confirm('Are you sure you want to finalize and submit your assessment? This will record your final score.');
+                        if (!confirmSubmit) return;
+
                         const status = document.getElementById('status-bar');
                         if (status) {
                             status.className = 'status-msg info';
@@ -1102,11 +1877,16 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
 
                     const diff = Math.floor((Date.now() - lastSavedTimestamp) / 1000);
                     if (diff < 5) el.innerText = 'just now';
-                    else if (diff < 60) el.innerText = diff + ' secs ago';
-                    else if (diff < 3600) el.innerText = Math.floor(diff / 60) + ' mins ago';
-                    else el.innerText = Math.floor(diff / 3600) + ' hrs ago';
+                    else if (diff < 60) el.innerText = diff + 's ago';
+                    else if (diff < 3600) el.innerText = Math.floor(diff / 60) + 'm ago';
+                    else el.innerText = Math.floor(diff / 3600) + 'h ago';
                 }
                 setInterval(updateRelativeTime, 10000);
+
+                // Start live timer if already restoring
+                if (${courseInfo.shouldRestore ? 'true' : 'false'}) {
+                    initAssessmentTimer(0);
+                }
 
                 window.addEventListener('message', event => {
                     const message = event.data;
@@ -1313,7 +2093,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                 const targetWrapper = canvases[match.pageIdx]?.wrapper;
                                 if (targetWrapper) {
                                     targetWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    targetWrapper.style.outline = '4px solid var(--vscode-focusBorder, #00b894)';
+                                    targetWrapper.style.outline = '4px solid var(--vscode-focusBorder, #3b82f6)';
                                     setTimeout(() => {
                                         targetWrapper.style.outline = 'none';
                                     }, 1500);
@@ -1386,7 +2166,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                 const loaderText = srcLoader.querySelector('div:nth-child(2)');
                                 if (loaderText) {
                                     loaderText.innerText = 'Failed to load PDF pages: ' + err.message;
-                                    loaderText.style.color = '#ff5e5e';
+                                    loaderText.style.color = '#ef4444';
                                 }
                                 const spinner = srcLoader.querySelector('.spinner');
                                 if (spinner) {
@@ -1403,7 +2183,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                             const loaderText = srcLoader.querySelector('div:nth-child(2)');
                             if (loaderText) {
                                 loaderText.innerText = 'Failed to load SRS document: ' + message.error;
-                                loaderText.style.color = '#ff5e5e';
+                                loaderText.style.color = '#ef4444';
                             }
                             const spinner = srcLoader.querySelector('.spinner');
                             if (spinner) {
@@ -1433,8 +2213,11 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                         } else if (message.state === 'loaded') {
                             loader.style.display = 'none';
                             errorView.style.display = 'none';
-                            dataView.style.display = 'block';
+                            dataView.style.display = 'flex';
 
+                            // Start assessment timer with server-synchronized elapsed seconds
+                            const serverElapsedSec = typeof message.timer === 'number' ? message.timer : (timerElapsedSeconds || 0);
+                            initAssessmentTimer(serverElapsedSec);
 
                             const payload = message.payload;
                             const qdata = Array.isArray(payload) ? payload[0] : payload;
@@ -1458,6 +2241,17 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                 document.getElementById('q-title').innerText = qdata?.question_name || qdata?.title || 'Question 1';
                                 document.getElementById('q-desc').innerHTML = qdata?.description || qdata?.question || 'Empty Question Description';
 
+                                // Display points/marks badge if available
+                                if (qdata.mark) {
+                                    totalQuestionMark = parseInt(qdata.mark);
+                                    const marksBadge = document.getElementById('q-marks-badge');
+                                    const marksVal = document.getElementById('q-marks-val');
+                                    if (marksBadge && marksVal) {
+                                        marksVal.innerText = String(totalQuestionMark);
+                                        marksBadge.style.display = 'inline-flex';
+                                    }
+                                }
+
                                 // Parse expected test case count from metadata
                                 if (qdata.testcaseCount) {
                                     try {
@@ -1469,17 +2263,19 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                         console.warn('[Amypo] Failed to parse testcaseCount:', qdata.testcaseCount);
                                     }
                                 }
-
-                                if (qdata.mark) {
-                                    totalQuestionMark = parseInt(qdata.mark);
-                                    console.log('[Amypo] Total question mark:', totalQuestionMark);
-                                }
                             }
                         } else if (message.state === 'status') {
                             const status = document.getElementById('status-bar');
                             status.className = 'status-msg ' + (message.type || 'info');
                             status.style.display = 'block';
                             status.innerText = message.text;
+
+                            // Update cloud sync badge
+                            if (message.type === 'success') {
+                                setSyncStatus('synced', 'Synced');
+                            } else if (message.type === 'error') {
+                                setSyncStatus('error', 'Sync error');
+                            }
 
                             // Re-enable save button on success or error
                             if (message.type === 'success' || message.type === 'error') {
@@ -1537,6 +2333,10 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                     const passedList = results.passedTests || [];
                                     const failedList = results.failedTests || [];
 
+                                    // Surface the Results button in the content header
+                                    const vrBtn = document.getElementById('view-res-btn');
+                                    if (vrBtn) vrBtn.style.display = 'inline-flex';
+
                                     if (payload.spring_results && payload.react_results) {
                                         // Fullstack View
                                         const tSec = document.getElementById('res-test-cases-section');
@@ -1554,10 +2354,10 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                             const spPassed = payload.spring_results.passedTests || [];
                                             if(spPassed.length > 0) {
                                                 pBoxSpring.innerText = spPassed.join('\\n');
-                                                pBoxSpring.style.color = '#00ce7a';
+                                                pBoxSpring.style.color = '#10b981';
                                             } else {
                                                 pBoxSpring.innerText = 'None';
-                                                pBoxSpring.style.color = '#adb5bd';
+                                                pBoxSpring.style.color = 'var(--vscode-descriptionForeground)';
                                             }
                                         }
 
@@ -1566,10 +2366,10 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                             const spFailed = payload.spring_results.failedTests || [];
                                             if(spFailed.length > 0) {
                                                 fBoxSpring.innerText = spFailed.join('\\n');
-                                                fBoxSpring.style.color = '#ff5e5e';
+                                                fBoxSpring.style.color = '#ef4444';
                                             } else {
                                                 fBoxSpring.innerText = 'None';
-                                                fBoxSpring.style.color = '#adb5bd';
+                                                fBoxSpring.style.color = 'var(--vscode-descriptionForeground)';
                                             }
                                         }
 
@@ -1579,10 +2379,10 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                             const rePassed = payload.react_results.passedTests || [];
                                             if(rePassed.length > 0) {
                                                 pBoxReact.innerText = rePassed.join('\\n');
-                                                pBoxReact.style.color = '#00ce7a';
+                                                pBoxReact.style.color = '#10b981';
                                             } else {
                                                 pBoxReact.innerText = 'None';
-                                                pBoxReact.style.color = '#adb5bd';
+                                                pBoxReact.style.color = 'var(--vscode-descriptionForeground)';
                                             }
                                         }
 
@@ -1591,10 +2391,10 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                             const reFailed = payload.react_results.failedTests || [];
                                             if(reFailed.length > 0) {
                                                 fBoxReact.innerText = reFailed.join('\\n');
-                                                fBoxReact.style.color = '#ff5e5e';
+                                                fBoxReact.style.color = '#ef4444';
                                             } else {
                                                 fBoxReact.innerText = 'None';
-                                                fBoxReact.style.color = '#adb5bd';
+                                                fBoxReact.style.color = 'var(--vscode-descriptionForeground)';
                                             }
                                         }
 
@@ -1620,10 +2420,10 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                             if (pBox) {
                                                 if(passedList.length > 0) {
                                                     pBox.innerText = passedList.join('\\n');
-                                                    pBox.style.color = '#00ce7a';
+                                                    pBox.style.color = '#10b981';
                                                 } else {
                                                     pBox.innerText = 'None';
-                                                    pBox.style.color = '#adb5bd';
+                                                    pBox.style.color = 'var(--vscode-descriptionForeground)';
                                                 }
                                             }
 
@@ -1631,10 +2431,10 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                             if (fBox) {
                                                 if(failedList.length > 0) {
                                                     fBox.innerText = failedList.join('\\n');
-                                                    fBox.style.color = '#ff5e5e';
+                                                    fBox.style.color = '#ef4444';
                                                 } else {
                                                     fBox.innerText = 'None';
-                                                    fBox.style.color = '#adb5bd';
+                                                    fBox.style.color = 'var(--vscode-descriptionForeground)';
                                                 }
                                             }
                                         } else {
@@ -1645,7 +2445,6 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                                         const terminalBox = document.getElementById('res-terminal');
                                         if (payload.full_terminal_output) {
                                             terminalBox.innerText = payload.full_terminal_output;
-                                            terminalBox.style.color = '#636e72';
                                             terminalBox.className = 'terminal-box';
                                         } else {
                                             terminalBox.innerText = 'No output from Terminal';
@@ -1659,6 +2458,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                         } else if (message.state === 'saved') {
                              lastSavedTimestamp = message.timestamp;
                              updateRelativeTime();
+                             setSyncStatus('synced', 'Synced');
 
                              // Also re-enable here just in case
                              const sBtn = document.getElementById('save-btn');

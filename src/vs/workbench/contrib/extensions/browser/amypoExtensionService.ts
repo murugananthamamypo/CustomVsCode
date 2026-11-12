@@ -20,15 +20,15 @@ export class AmypoExtensionService {
     ): Promise<string[]> {
 
         const lower = (serverType ?? '').toLowerCase().trim();
-        const isDev = lower === 'dev' || lower === 'dv' || lower === 'development';
-        const isProd = lower === 'prod' || lower === 'produ' || lower === 'production';
+        const isDev = lower === 'dev' || lower === 'dv' || lower === 'development' || lower.startsWith('dev');
+        const isProd = lower === 'prod' || lower === 'produ' || lower === 'production' || lower.startsWith('prod');
 
         if (!isDev && !isProd) {
             console.log('[Amypo Extension] ❌ Missing or invalid serverType — skipping fetch');
             return [];
         }
 
-        const normalizedServerType = isDev ? 'dev' : 'prod';
+        const normalizedServerType = isDev ? 'development' : 'production';
         const apiUrl = isDev ? 'https://1102amy21.amypo.ai/api' : 'https://endpoint.amypo.ai/api';
 
         const now = Date.now();

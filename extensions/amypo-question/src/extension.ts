@@ -18,23 +18,23 @@ import { verifySpringBoot, verifyReact, verifyReactSpring, verifySelenium } from
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
-function normalizeServerType(type: string | undefined | null): 'dev' | 'prod' | null {
+function normalizeServerType(type: string | undefined | null): 'development' | 'production' | null {
 	const lower = (type ?? '').toLowerCase().trim();
-	if (lower === 'dev' || lower === 'dv' || lower === 'development') {
-		return 'dev';
+	if (lower === 'dev' || lower === 'dv' || lower === 'development' || lower.startsWith('dev')) {
+		return 'development';
 	}
-	if (lower === 'prod' || lower === 'produ' || lower === 'production') {
-		return 'prod';
+	if (lower === 'prod' || lower === 'produ' || lower === 'production' || lower.startsWith('prod')) {
+		return 'production';
 	}
 	return null;
 }
 
 function getApiUrl(type: string | undefined | null): string {
 	const normalized = normalizeServerType(type);
-	if (normalized === 'dev') {
+	if (normalized === 'development') {
 		return 'https://1102amy21.amypo.ai/api';
 	}
-	if (normalized === 'prod') {
+	if (normalized === 'production') {
 		return 'https://endpoint.amypo.ai/api';
 	}
 	return '';
@@ -42,10 +42,10 @@ function getApiUrl(type: string | undefined | null): string {
 
 function getStorageUrl(type: string | undefined | null): string {
 	const normalized = normalizeServerType(type);
-	if (normalized === 'dev') {
+	if (normalized === 'development') {
 		return 'https://1102amy21.amypo.ai/storage';
 	}
-	if (normalized === 'prod') {
+	if (normalized === 'production') {
 		return 'https://endpoint.amypo.ai/storage';
 	}
 	return '';
@@ -53,7 +53,7 @@ function getStorageUrl(type: string | undefined | null): string {
 
 function getVersionUrl(type: string | undefined | null): string {
 	const normalized = normalizeServerType(type);
-	if (normalized === 'dev') {
+	if (normalized === 'development') {
 		return 'https://1102amy21.amypo.ai/storage/products/version.json';
 	}
 	return 'https://endpoint.amypo.ai/storage/products/version.json';
@@ -507,8 +507,8 @@ export async function activate(context: vscode.ExtensionContext) {
 				// }, () => { });
 
 				if (!allocation_id || !token || !normalizedServer) {
-					console.error('[Amypo] ERROR: Missing or invalid required params! allocation_id, token, and valid server_type (dev/dv or prod/produ) are required.');
-					vscode.window.showErrorMessage('Amypo: Invalid deep link — allocation_id, token, and a valid server_type (dev or prod) are required.');
+					console.error('[Amypo] ERROR: Missing or invalid required params! allocation_id, token, and valid server_type (development or production) are required.');
+					vscode.window.showErrorMessage('Amypo: Invalid deep link — allocation_id, token, and a valid server_type (development or production) are required.');
 					return;
 				}
 
@@ -1867,7 +1867,8 @@ export async function activate(context: vscode.ExtensionContext) {
 				await cloneAndOpenRepo(repo_url, moduleId, primaryLanguageId);
 
 				if (qData) {
-					const msg = { state: 'loaded', payload: qData, stats: statsObj, aiFeatures: aiDebugerOptimizer };
+					const currentTimer = Math.max(0, Math.floor((Date.now() - testStartTime) / 1000));
+					const msg = { state: 'loaded', payload: qData, stats: statsObj, aiFeatures: aiDebugerOptimizer, timer: currentTimer };
 					eduViewProvider.postMessage(msg);
 					// Cache the data for immediate restoration after host restart
 					await context.globalState.update('amypo.cachedQuestion', msg);
@@ -2188,6 +2189,18 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	eduViewProvider.setOnSave(() => syncGit('save'));
 	eduViewProvider.setOnPull(() => syncGit('pull'));
+	eduViewProvider.setOnReload(async () => {
+		try {
+			const cached = context.globalState.get<any>('amypo.cachedQuestion');
+			if (cached) {
+				const currentTimer = Math.max(0, Math.floor((Date.now() - testStartTime) / 1000));
+				eduViewProvider.postMessage({ ...cached, timer: currentTimer });
+				eduViewProvider.postMessage({ state: 'status', type: 'info', text: 'Refreshed question details' });
+			}
+		} catch (e: any) {
+			console.error('[Amypo] Reload error:', e);
+		}
+	});
 
 	eduViewProvider.setOnVerify(async () => {
 		try {
@@ -2583,8 +2596,9 @@ export async function activate(context: vscode.ExtensionContext) {
 					activeToken
 				);
 
+				const currentTimer = Math.max(0, Math.floor((Date.now() - testStartTime) / 1000));
 				const questionMessage = qData
-					? { state: 'loaded', payload: qData, stats: statsObj, aiFeatures }
+					? { state: 'loaded', payload: qData, stats: statsObj, aiFeatures, timer: currentTimer }
 					: { state: 'error', message: 'Failed to retrieve question details.' };
 
 				if (qData) {
@@ -2594,7 +2608,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				const savedCourseInfo = context.globalState.get<any>('amypo.courseInfo');
 				if (savedCourseInfo) {
 					const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.6';
-					eduViewProvider.updateView({ ...savedCourseInfo, shouldRestore: true, version: extVersion }, () => { });
+					eduViewProvider.updateView({ ...savedCourseInfo, shouldRestore: true, version: extVersion, timer: currentTimer }, () => { });
 					eduViewProvider.setOnReady(() => {
 						eduViewProvider.postMessage(questionMessage);
 					});

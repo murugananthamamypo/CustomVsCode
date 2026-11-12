@@ -45,8 +45,10 @@ export async function fetchData(endpoint: string, token: string = ''): Promise<a
 
     try {
         const response = await axios.get<any>(`${endpoint}`, {
+            timeout: 15000,
             headers: {
                 Authorization: safeToken ? `Bearer ${safeToken}` : '',
+                'x-client-key': '9f3a7c1d5e8b2a6f4c0d7e1b9a3f6c8d2e5a7b1c4d9f0e6a3b8c2d5f7a1e9c0'
             },
         })
         return response.data
@@ -112,9 +114,11 @@ export async function jsonsubmitData(
             method,
             url: endpoint,
             data: payload,
+            timeout: 15000,
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: safeToken ? `Bearer ${safeToken}` : '',
+                'x-client-key': '9f3a7c1d5e8b2a6f4c0d7e1b9a3f6c8d2e5a7b1c4d9f0e6a3b8c2d5f7a1e9c0'
             },
         })
 

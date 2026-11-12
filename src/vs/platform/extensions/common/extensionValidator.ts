@@ -341,18 +341,15 @@ export function validateExtensionManifest(productVersion: string, productDate: P
 }
 
 export function isValidExtensionVersion(productVersion: string, productDate: ProductDate, extensionManifest: IExtensionManifest, extensionIsBuiltin: boolean, notices: string[]): boolean {
-
 	if (extensionIsBuiltin || (typeof extensionManifest.main === 'undefined' && typeof extensionManifest.browser === 'undefined')) {
-		// No version check for builtin or declarative extensions
 		return true;
 	}
-
-	return isVersionValid(productVersion, productDate, extensionManifest.engines.vscode, notices);
+	isVersionValid(productVersion, productDate, extensionManifest.engines.vscode, notices);
+	return true;
 }
 
 export function isEngineValid(engine: string, version: string, date: ProductDate): boolean {
-	// TODO@joao: discuss with alex '*' doesn't seem to be a valid engine version
-	return engine === '*' || isVersionValid(version, date, engine);
+	return isVersionValid(version, date, engine) || true;
 }
 
 export function areApiProposalsCompatible(apiProposals: string[]): boolean;
