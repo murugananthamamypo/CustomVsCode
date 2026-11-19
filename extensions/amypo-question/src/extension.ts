@@ -11,7 +11,7 @@ import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import axios from 'axios';
 
-import { EduViewProvider, ICourseInfo } from './webview/EduModal';
+import { EduViewProvider } from './webview/EduModal';
 import { submitData, jsonsubmitData, fetchData } from './services/axios/submissions';
 import { verifySpringBoot, verifyReact, verifyReactSpring, verifySelenium } from './services/verificationService';
 
@@ -34,10 +34,7 @@ function getApiUrl(type: string | undefined | null): string {
 	if (normalized === 'development') {
 		return 'https://1102amy21.amypo.ai/api';
 	}
-	if (normalized === 'production') {
-		return 'https://endpoint.amypo.ai/api';
-	}
-	return '';
+	return 'https://endpoint.amypo.ai/api';
 }
 
 function getStorageUrl(type: string | undefined | null): string {
@@ -45,10 +42,7 @@ function getStorageUrl(type: string | undefined | null): string {
 	if (normalized === 'development') {
 		return 'https://1102amy21.amypo.ai/storage';
 	}
-	if (normalized === 'production') {
-		return 'https://endpoint.amypo.ai/storage';
-	}
-	return '';
+	return 'https://endpoint.amypo.ai/storage';
 }
 
 function getVersionUrl(type: string | undefined | null): string {
@@ -59,8 +53,8 @@ function getVersionUrl(type: string | undefined | null): string {
 	return 'https://endpoint.amypo.ai/storage/products/version.json';
 }
 
-let server_type: string = '';
-let API_URL = '';
+let server_type: string = 'production';
+let API_URL: string = 'https://endpoint.amypo.ai/api';
 
 let GITHUB_TOKEN = '';
 let GIT_URL = '';
@@ -442,16 +436,53 @@ export async function activate(context: vscode.ExtensionContext) {
 		console.error('[Amypo] Error during Git PATH detection:', gitErr);
 	}
 
-	// Disable intrusive notifications from Java dependency / Copilot modernization during tests
-	try {
-		const javaDepConfig = vscode.workspace.getConfiguration('java.dependency');
-		if (javaDepConfig.get('enableDependencyCheckup') !== false) {
+	// 🔒 Security & AI Restriction: Disable intrusive notifications, Copilot prompts, and dependency checkups during tests
+	const enforceAssessmentSecuritySettings = async (targetProjectPath?: string | null): Promise<void> => {
+		try {
+			const javaDepConfig = vscode.workspace.getConfiguration('java.dependency');
 			await javaDepConfig.update('enableDependencyCheckup', false, vscode.ConfigurationTarget.Global);
-			console.log('[Amypo] Disabled java.dependency.enableDependencyCheckup.');
+			await javaDepConfig.update('enableDependencyCheckup', false, vscode.ConfigurationTarget.Workspace);
+
+			const extConfig = vscode.workspace.getConfiguration('extensions');
+			await extConfig.update('ignoreRecommendations', true, vscode.ConfigurationTarget.Global);
+			await extConfig.update('ignoreRecommendations', true, vscode.ConfigurationTarget.Workspace);
+
+			const tipsConfig = vscode.workspace.getConfiguration('workbench.tips');
+			await tipsConfig.update('enabled', false, vscode.ConfigurationTarget.Global);
+
+			// Explicitly block AI extension tools & Copilot modernization prompts
+			const chatConfig = vscode.workspace.getConfiguration('chat');
+			await chatConfig.update('extensionTools.enabled', false, vscode.ConfigurationTarget.Global);
+
+			const copilotConfig = vscode.workspace.getConfiguration('github.copilot');
+			await copilotConfig.update('enable', { '*': false }, vscode.ConfigurationTarget.Global);
+
+			if (targetProjectPath && fs.existsSync(targetProjectPath)) {
+				const vscodeDir = path.join(targetProjectPath, '.vscode');
+				if (!fs.existsSync(vscodeDir)) {
+					fs.mkdirSync(vscodeDir, { recursive: true });
+				}
+				const settingsFile = path.join(vscodeDir, 'settings.json');
+				let currentSettings: any = {};
+				if (fs.existsSync(settingsFile)) {
+					try {
+						currentSettings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+					} catch { }
+				}
+				currentSettings['java.dependency.enableDependencyCheckup'] = false;
+				currentSettings['extensions.ignoreRecommendations'] = true;
+				currentSettings['workbench.tips.enabled'] = false;
+				currentSettings['chat.extensionTools.enabled'] = false;
+				currentSettings['github.copilot.enable'] = { '*': false };
+				fs.writeFileSync(settingsFile, JSON.stringify(currentSettings, null, 4), 'utf8');
+				console.log('[Amypo Security] Assessment security settings written to:', settingsFile);
+			}
+		} catch (confErr) {
+			console.warn('[Amypo Security] Failed to enforce assessment security settings:', confErr);
 		}
-	} catch (confErr) {
-		console.warn('[Amypo] Failed to update java.dependency configuration:', confErr);
-	}
+	};
+
+	await enforceAssessmentSecuritySettings();
 
 	//  Auto-Update Check (blocking)
 	try {
@@ -500,11 +531,6 @@ export async function activate(context: vscode.ExtensionContext) {
 				console.log('  token         :', token);
 				console.log('  server_type   :', rawServerType, '->', normalizedServer);
 				console.log('========================================');
-				// eduViewProvider.updateView({
-				// 	course_name: 'Amypo coder',
-				// 	module_name: 'Datas Not Received',
-				// 	errorMessage: `Test details allocation_id : ${allocation_id} token: ${token} test_type: ${test_type} module_id: ${module_id} server_type: ${server_type}`
-				// }, () => { });
 
 				if (!allocation_id || !token || !normalizedServer) {
 					console.error('[Amypo] ERROR: Missing or invalid required params! allocation_id, token, and valid server_type (development or production) are required.');
@@ -962,7 +988,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		if (process.platform !== 'win32' && process.platform !== 'linux' && process.platform !== 'darwin') { return; }
 		if (_monitorInterval) { clearInterval(_monitorInterval); }
 
-		const folderName = path.basename(projectPath);
 		const parentPath = path.dirname(projectPath); // amypo/workspace
 		const grandparentPath = path.dirname(parentPath); // amypo
 		const currentPid = process.pid;
@@ -1076,7 +1101,6 @@ export async function activate(context: vscode.ExtensionContext) {
 					const projectPathLower = projectPath.toLowerCase();
 					const parentPathLower = parentPath.toLowerCase();
 					const grandparentPathLower = grandparentPath.toLowerCase();
-					const appRootLower = vscode.env.appRoot.toLowerCase().replace(/[\\/]resources[\\/]app$/i, '');
 
 					const suspects = [
 						"code", "cursor", "sublime", "atom", "idea", "webstorm", "pycharm", "rider",
@@ -1540,14 +1564,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	): Promise<any> => {
 		try {
 			const payload = {
-				allocate_id: currentAllocationData?.id ?? 0,
+				allocate_id: activeAllocation?.id ?? currentAllocationData?.id ?? 0,
 				preview: 0,
 				test_type,
 				module_id: moduleId,
 				questionId,
-				course_allocation_id: currentAllocationData?.allocation_id ?? 0,
-				db: currentAllocationData?.db ?? 'link_test',
-				topic_test_id: currentAllocationData?.topic_id ?? currentAllocationData?.test_id ?? 0,
+				course_allocation_id: activeAllocation?.allocation_id ?? currentAllocationData?.allocation_id ?? 0,
+				db: activeAllocation?.db ?? currentAllocationData?.db ?? 'link_test',
+				topic_test_id: activeAllocation?.topic_id ?? currentAllocationData?.topic_id ?? activeAllocation?.test_id ?? currentAllocationData?.test_id ?? 0,
 			};
 
 			const endpoint = test_type === 2
@@ -1720,7 +1744,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			console.log('[Amypo EduTech] Course:', course_details?.course_name);
 
-			const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.6';
+			const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.8';
 			const courseInfo = {
 				course_name: course_details?.course_name ?? 'N/A',
 				topic_name: topic_details?.topic_name ?? 'N/A',
@@ -1969,6 +1993,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	const startAssessmentLockdown = async (projectPath: string): Promise<void> => {
 		console.log('[Amypo Security] Assessment lockdown started.');
+		await enforceAssessmentSecuritySettings(projectPath);
 		startFolderAccessMonitor(projectPath);
 		startExternalWatcher(projectPath);
 		console.log('[Amypo Security] All lockdown layers active.');
@@ -1980,9 +2005,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Blocked VS Code Commands
 	const BLOCKED_COMMANDS = [
-
 		'workbench.action.files.revealActiveFileInWindows',
 		'explorer.openToSide',
+		'_java.upgradeWithCopilot',
+		'workbench.view.extension.azureJavaMigrationExplorer',
+		'workbench.extensions.action.installVSIX',
+		'workbench.extensions.command.installFromVSIX',
 	];
 
 	BLOCKED_COMMANDS.forEach(cmd => {
@@ -2071,7 +2099,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		isSyncing = true;
 
 		try {
-			if (!currentProjectPath || !currentRepoUrl) {
+			if (!currentProjectPath) {
+				vscode.window.showErrorMessage('Amypo: No active project found to sync.');
 				eduViewProvider.postMessage({ state: 'status', type: 'error', text: 'No active project found.' });
 				return;
 			}
@@ -2087,6 +2116,22 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			const fullPath = path.join(currentProjectPath, subpath);
 			const workingDir = fs.existsSync(path.join(fullPath, '.git')) ? fullPath : currentProjectPath;
+
+			if (!currentRepoUrl) {
+				try {
+					const { stdout } = await execAsync('git config --get remote.origin.url', { cwd: workingDir });
+					if (stdout && stdout.trim()) {
+						currentRepoUrl = stdout.trim();
+						console.log('[Amypo Git] Recovered repoUrl from git origin:', currentRepoUrl);
+					}
+				} catch { }
+			}
+
+			if (!currentRepoUrl) {
+				vscode.window.showErrorMessage('Amypo: Remote repository URL not found.');
+				eduViewProvider.postMessage({ state: 'status', type: 'error', text: 'Remote repository URL not found.' });
+				return;
+			}
 
 			console.log(`[Amypo Git] ${action} in ${workingDir}`);
 			vscode.window.setStatusBarMessage(`$(sync~spin) Amypo: ${action === 'save' ? 'Saving' : 'Pulling'} changes…`, 10000);
@@ -2151,6 +2196,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				vscode.window.setStatusBarMessage('$(check) Amypo: Saved to cloud.', 5000);
 				eduViewProvider.postMessage({ state: 'status', type: 'success', text: 'Saved to cloud successfully!' });
 				eduViewProvider.postMessage({ state: 'saved', timestamp });
+				console.log('[Amypo] Save Successful');
 
 				// Sync meta-state to Amypo server
 				try {
@@ -2165,11 +2211,14 @@ export async function activate(context: vscode.ExtensionContext) {
 				try {
 					console.log(`[Amypo Git] Pulling from: ${authenticatedUrl.replace(GITHUB_TOKEN, '***')}`);
 					await execAsync(`git pull "${authenticatedUrl}" main`, { cwd: workingDir });
+					vscode.window.showInformationMessage('Amypo: Pulled latest changes successfully!');
 					vscode.window.setStatusBarMessage('$(check) Amypo: Pulled latest changes.', 5000);
-					eduViewProvider.postMessage({ state: 'status', type: 'success', text: 'Pulled latest changes!' });
+					eduViewProvider.postMessage({ state: 'status', type: 'success', text: 'Pull Successful: Pulled latest changes!' });
+					console.log('[Amypo] Pull Successfully');
 				} catch (pullErr: any) {
 					console.error('[Amypo Git] Error during pull:', pullErr);
 					const errMsg = pullErr.stderr ?? pullErr.message ?? 'Git pull failed';
+					vscode.window.showErrorMessage(`Amypo: Failed to pull: ${errMsg}`);
 					eduViewProvider.postMessage({
 						state: 'status',
 						type: 'error',
@@ -2203,10 +2252,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	eduViewProvider.setOnVerify(async () => {
+		console.log('[Amypo] Clicked Check Verify');
 		try {
 
 			const cachedQuestion = context.globalState.get<any>('amypo.cachedQuestion');
-			if (!currentAllocationData || !currentProjectType) {
+			if ((!currentAllocationData && !activeAllocation) || !currentProjectType) {
 				eduViewProvider.postMessage({ state: 'status', type: 'error', text: 'No active test found for verification.' });
 				return;
 			}
@@ -2312,8 +2362,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	eduViewProvider.setOnSubmit(async () => {
+		console.log('[Amypo] Clicked Final Submit');
 		if (!lastVerificationResult) {
-			eduViewProvider.postMessage({ state: 'status', type: 'error', text: 'Please verify your work before submitting.' });
+			vscode.window.showWarningMessage('Amypo: Please run "Check Verify" to test your code before submitting.');
+			eduViewProvider.postMessage({ state: 'status', type: 'error', text: 'Please run "Check Verify" to test your code before submitting.' });
 			return;
 		}
 
@@ -2347,15 +2399,15 @@ export async function activate(context: vscode.ExtensionContext) {
 			}
 
 			const payload: any = {
-				allocate_id: currentAllocationData?.id ? parseInt(currentAllocationData.id) : 0,
+				allocate_id: activeAllocation?.id ? parseInt(activeAllocation.id) : (currentAllocationData?.id ? parseInt(currentAllocationData.id) : 0),
 				test_type: activeTestType,
 				module_id: activeModuleId,
-				questionId: question?.id,
-				type: question?.type,
-				course_allocation_id: currentAllocationData?.allocation_id,
-				topic_id: currentAllocationData?.topic_id,
-				db: currentAllocationData?.db,
-				topic_test_id: currentAllocationData?.topic_id || currentAllocationData?.test_id,
+				questionId: question?.id ?? fullQuestion?.question_id ?? 0,
+				type: question?.type ?? fullQuestion?.type ?? 1,
+				course_allocation_id: activeAllocation?.allocation_id ?? currentAllocationData?.allocation_id ?? 0,
+				topic_id: activeAllocation?.topic_id ?? currentAllocationData?.topic_id ?? 0,
+				db: activeAllocation?.db ?? currentAllocationData?.db ?? '',
+				topic_test_id: activeAllocation?.topic_id ?? currentAllocationData?.topic_id ?? activeAllocation?.test_id ?? 0,
 				solution: '',
 				question_timer: testTimer,
 				run_count: question?.run_count ?? 0,
@@ -2376,19 +2428,22 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			console.log('[Amypo] Payload for submit mark:', payload);
 
+			const baseApi = API_URL || getApiUrl(server_type || context.globalState.get<string>('amypo.serverType'));
 			const endpoint = activeTestType === 2
-				? `${API_URL}/sandbox/link_submit`
-				: `${API_URL}/sandbox/submit`;
+				? `${baseApi}/sandbox/link_submit`
+				: `${baseApi}/sandbox/submit`;
 
-			const resp = await jsonsubmitData(payload, endpoint, 0, activeToken);
+			const tokenToUse = activeToken || context.globalState.get<string>('amypo.token') || '';
+			const resp = await jsonsubmitData(payload, endpoint, 0, tokenToUse);
 			console.log('[Amypo] Submit mark resp:', resp);
 
-			if (resp?.status === 200) {
-				if (user_mark > 0 && question) {
+			if (resp?.status === 200 || resp?.status === 201) {
+				if (question) {
 					question.solve_status = 2; // update local status to submitted
 				}
+				vscode.window.showInformationMessage('Amypo: Final results submitted successfully!');
 				eduViewProvider.postMessage({ state: 'status', type: 'success', text: 'Final results submitted successfully!' });
-				console.log('[Amypo] Mark stored successfully.');
+				console.log('[Amypo] Final Submit Successful');
 			} else {
 				throw new Error(resp?.message || 'Submission failed');
 			}
@@ -2447,9 +2502,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			}, 1500);
 		}
 
-		// Ensure project exists during restoration
-		const savedPath = context.globalState.get<string>('amypo.projectPath');
-
 		// Restore saved data from globalState
 		currentAllocationData = context.globalState.get('amypo.allocationData') ?? null;
 		currentProjectPath = context.globalState.get<string>('amypo.projectPath') ?? null;
@@ -2492,6 +2544,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		if (cachedDetails) {
 			console.log('[Amypo] Restoring metadata from cache…');
 			activeAllocation = cachedDetails.allocation;
+			if (!currentAllocationData || !currentAllocationData.topic_id || !currentAllocationData.db) {
+				currentAllocationData = { ...currentAllocationData, ...cachedDetails.allocation };
+			}
 		}
 		if (cachedQuestions) {
 			activeQuestionDatas = cachedQuestions;
@@ -2516,7 +2571,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					console.log('[Amypo] Using cached course info (transition recovery)', savedCourseInfo);
 
 					if (savedCourseInfo) {
-						const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.6';
+						const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.8';
 						eduViewProvider.updateView({ ...savedCourseInfo, shouldRestore: true, version: extVersion }, () => { });
 						eduViewProvider.setOnReady(() => {
 							eduViewProvider.postMessage(cachedMsg);
@@ -2607,7 +2662,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 				const savedCourseInfo = context.globalState.get<any>('amypo.courseInfo');
 				if (savedCourseInfo) {
-					const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.6';
+					const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.8';
 					eduViewProvider.updateView({ ...savedCourseInfo, shouldRestore: true, version: extVersion, timer: currentTimer }, () => { });
 					eduViewProvider.setOnReady(() => {
 						eduViewProvider.postMessage(questionMessage);
@@ -2654,7 +2709,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		console.log('Get test details called');
 
-		// For development: you can uncomment the line below to test with static details
+		// For development: you can uncomment the lines below to test with static details
+		// server_type = 'development';
+		// API_URL = getApiUrl(server_type);
 		// getTestDetails(STATIC_ALLOCATION_ID, STATIC_TEST_TYPE, STATIC_TOKEN, STATIC_MODULE_ID);
 	}
 
@@ -2814,6 +2871,13 @@ export async function activate(context: vscode.ExtensionContext) {
 					`Amypo Version: ${version}`
 				);
 			})
+	);
+
+	// ✅ Intercept restricted shortcuts (e.g. Ctrl+Shift+X for extensions viewlet)
+	context.subscriptions.push(
+		vscode.commands.registerCommand('amypo.blockAction', () => {
+			vscode.window.showWarningMessage('⚠️ This action is not allowed during the assessment.');
+		})
 	);
 
 	context.subscriptions.push(vscode.commands.registerCommand('amypo.exit', async () => {

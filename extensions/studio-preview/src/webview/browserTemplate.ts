@@ -138,13 +138,14 @@ export function getBrowserTemplate(
 
   <div id="toolbar">
     <button class="nav-btn" id="btn-back" title="Back">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 3L5 8l5 5"/>
       </svg>
     </button>
     <button class="nav-btn" id="btn-refresh" title="Refresh">
-      <svg width="14" height="14" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.5">
-        <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.8 0 3.4.87 4.4 2.2"/>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13.5 2.5v3.5h-3.5"/>
+        <path d="M13.1 8a5.5 5.5 0 1 1-1.6-3.9l2 1.9"/>
       </svg>
     </button>
 

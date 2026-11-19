@@ -5,13 +5,10 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { exec } from 'child_process';
-import { promisify } from 'util';
 import axios from 'axios';
 import * as vscode from 'vscode';
 import { getFreshWindowsEnv } from './envService';
 import extract = require('extract-zip');
-
-const execAsync = promisify(exec);
 
 async function hideTestFolder(projectPath: string, folderPattern: string, gitPattern: string) {
 	try {
@@ -327,7 +324,7 @@ export async function verifySpringBoot(request: VerificationRequest) {
 			throw new Error(`Failed to fetch testcase from backend. Status: ${response.status}`);
 		}
 
-		console.log('✓ Testcase fetched successfully', response);
+		console.log('✓ Testcase fetched successfully');
 
 		// Step 2: Extract directly to application test directory
 		if (!fs.existsSync(localDestPath)) {
@@ -724,7 +721,7 @@ export async function verifySelenium(request: VerificationRequest) {
 		const projectRoot = project_path;
 		console.log('🧪 Running Selenium tests in:', projectRoot);
 
-		const { stdout, stderr, exitCode } = await execAllowFail(`mvn clean test`, {
+		const { stdout, stderr } = await execAllowFail(`mvn clean test`, {
 			cwd: projectRoot,
 			maxBuffer: 50 * 1024 * 1024,
 			timeout: 480000
