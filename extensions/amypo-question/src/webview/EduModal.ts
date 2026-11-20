@@ -649,7 +649,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     flex-direction: column;
                     overflow: hidden;
                     position: relative;
-                    margin: 10px 12px 68px 12px;
+                    margin: 10px 12px 78px 12px;
                     z-index: 1;
                 }
                 .content-area {
@@ -930,51 +930,52 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     bottom: 0;
                     left: 0;
                     right: 0;
-                    height: 60px;
+                    height: 70px;
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
-                    gap: 10px;
-                    padding: 8px 12px;
+                    gap: 12px;
+                    padding: 9px 14px;
                     background: var(--amy-bg-card);
                     border-top: 1px solid var(--amy-border);
-                    box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
+                    box-shadow: 0 -2px 12px rgba(0,0,0,0.07);
                     z-index: 50;
                 }
                 .action-bar-left {
                     display: flex;
                     align-items: center;
-                    gap: 8px;
+                    gap: 10px;
                     flex: 1;
                 }
                 .action-bar-right {
                     display: flex;
                     align-items: center;
-                    gap: 8px;
+                    gap: 10px;
                     flex: 1;
                     justify-content: flex-end;
                 }
 
                 .btn-action {
                     flex: 1;
-                    height: 44px;
-                    padding: 0 12px;
-                    border-radius: 8px;
+                    height: 52px;
+                    padding: 0 14px;
+                    border-radius: 9px;
                     border: 1px solid var(--amy-border);
                     background: var(--vscode-editor-background, rgba(128, 128, 128, 0.08));
                     color: var(--vscode-foreground);
-                    font-size: 12.5px;
-                    font-weight: 600;
+                    font-size: 13.5px;
+                    font-weight: 700;
                     cursor: pointer;
                     transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
                     display: inline-flex;
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    gap: 2px;
+                    gap: 3px;
                     user-select: none;
                     text-decoration: none;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+                    letter-spacing: 0.15px;
                 }
                 body.vscode-dark .btn-action,
                 body.vscode-high-contrast .btn-action {
@@ -984,8 +985,8 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                 .btn-action:hover:not(:disabled) {
                     background: var(--amy-card-hover, rgba(128, 128, 128, 0.14));
                     border-color: var(--vscode-focusBorder, var(--amy-primary));
-                    transform: translateY(-1px);
-                    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+                    transform: translateY(-1.5px);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
                 }
                 .btn-action:active:not(:disabled) {
                     transform: translateY(0);
@@ -1000,7 +1001,22 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                 .btn-action .btn-inner-row {
                     display: inline-flex;
                     align-items: center;
-                    gap: 6px;
+                    gap: 7px;
+                    font-size: 13.5px;
+                    font-weight: 700;
+                }
+                .btn-action .ui-icon {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .btn-action .ui-icon svg {
+                    width: 15px;
+                    height: 15px;
+                }
+                .btn-verify .ui-icon svg {
+                    width: 14px;
+                    height: 14px;
                 }
 
                 /* Save Button (Warm Amber) */
@@ -1068,10 +1084,11 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                 }
 
                 .save-time {
-                    font-size: 10.5px;
-                    opacity: 0.82;
+                    font-size: 11px;
+                    opacity: 0.88;
                     font-weight: 500;
-                    margin-top: -1px;
+                    margin-top: 0px;
+                    letter-spacing: 0.1px;
                 }
 
                 /* STATUS NOTIFICATIONS (Floating Toast - Top Right corner) */
@@ -1166,9 +1183,9 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                     margin-bottom: 14px;
                 }
                 .btn-spinner {
-                    width: 12px;
-                    height: 12px;
-                    border: 2px solid rgba(255, 255, 255, 0.3);
+                    width: 14px;
+                    height: 14px;
+                    border: 2px solid rgba(255, 255, 255, 0.35);
                     border-radius: 50%;
                     border-top-color: #ffffff;
                     animation: amySpin 0.8s linear infinite;
@@ -1819,28 +1836,37 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                         justify-content: center;
                     }
                     /* Convert 4 squished buttons into a clean 2x2 grid */
+                    .main-layout {
+                        margin-bottom: 124px;
+                    }
                     .action-bar {
+                        height: auto;
+                        min-height: 114px;
                         flex-direction: column;
-                        padding: 8px 10px;
-                        gap: 6px;
+                        padding: 10px 12px;
+                        gap: 8px;
                     }
                     .action-bar-left,
                     .action-bar-right {
                         width: 100%;
                         display: flex;
-                        gap: 6px;
+                        gap: 8px;
                     }
                     .btn-action {
-                        height: 38px;
-                        font-size: 12px;
-                        padding: 0 8px;
+                        height: 48px;
+                        min-height: 48px;
+                        font-size: 13px;
+                        padding: 0 10px;
+                        border-radius: 8px;
                     }
                     .btn-action .btn-inner-row {
-                        gap: 5px;
+                        gap: 6px;
+                        font-size: 13px;
+                        font-weight: 700;
                         white-space: nowrap;
                     }
                     .btn-action .save-time {
-                        font-size: 10px;
+                        font-size: 10.5px;
                         white-space: nowrap;
                     }
                 }
@@ -1975,7 +2001,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
 
                         <!-- Version Tag -->
                         <span class="version-tag">
-                            v${courseInfo.version ?? "1.5.8"}
+                            v${courseInfo.version ?? "1.5.9"}
                         </span>
                     </div>
                 </div>
@@ -2075,7 +2101,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                             <div class="btn-inner-row">
                                 <div class="btn-spinner" id="save-spinner"></div>
                                 <span class="ui-icon">
-                                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M12.5 14H3.5a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 3.5 2H10l3.5 3.5v7a1.5 1.5 0 0 1-1.5 1.5z"/>
                                         <polyline points="9.5 2 9.5 5.5 4.5 5.5"/>
                                         <polyline points="4.5 14 4.5 9.5 11.5 9.5 11.5 14"/>
@@ -2091,7 +2117,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                             <div class="btn-inner-row">
                                 <div class="btn-spinner" id="pull-spinner"></div>
                                 <span class="ui-icon">
-                                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M8 2v9"/>
                                         <polyline points="4.5 7.5 8 11 11.5 7.5"/>
                                         <path d="M2.5 13.5h11"/>
@@ -2107,7 +2133,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                         <button class="btn-action btn-verify" id="verify-btn" title="Run tests and verify implementation">
                             <div class="btn-inner-row">
                                 <span class="ui-icon">
-                                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                                         <polygon points="4 2.5 13 8 4 13.5 4 2.5"/>
                                     </svg>
                                 </span>
@@ -2119,7 +2145,7 @@ export class EduViewProvider implements vscode.WebviewViewProvider {
                             <div class="btn-inner-row">
                                 <div class="btn-spinner" id="submit-spinner"></div>
                                 <span class="ui-icon">
-                                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M14.5 1.5l-6 13-2.5-5.5L.5 6.5l14-5z"/>
                                         <line x1="6" y1="9" x2="14.5" y2="1.5"/>
                                     </svg>

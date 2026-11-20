@@ -723,12 +723,26 @@ export async function activate(context: vscode.ExtensionContext) {
 		try {
 			console.log(`[Amypo] Creating GitHub repo: ${owner}/${name}`);
 
-			const userResp = await axios.get('https://api.github.com/user', {
-				headers: {
-					Authorization: `token ${token}`,
-					Accept: 'application/vnd.github.v3+json',
-				},
-			});
+			let userResp;
+			try {
+				userResp = await axios.get('https://api.github.com/user', {
+					headers: {
+						Authorization: `token ${token}`,
+						Accept: 'application/vnd.github.v3+json',
+					},
+					timeout: 10000,
+				});
+			} catch (netErr: any) {
+				console.warn('[Amypo] GitHub user lookup hiccup, retrying in 1.5s...', netErr.message);
+				await new Promise(r => setTimeout(r, 1500));
+				userResp = await axios.get('https://api.github.com/user', {
+					headers: {
+						Authorization: `token ${token}`,
+						Accept: 'application/vnd.github.v3+json',
+					},
+					timeout: 15000,
+				});
+			}
 			const authenticatedUser: string = userResp.data.login;
 			console.log(`[Amypo] Authenticated GitHub user: ${authenticatedUser}`);
 
@@ -745,11 +759,12 @@ export async function activate(context: vscode.ExtensionContext) {
 						Authorization: `token ${token}`,
 						Accept: 'application/vnd.github.v3+json',
 					},
+					timeout: 15000,
 				}
 			);
 
 			console.log(`[Amypo] Repo ${owner}/${name} created. Waiting for GitHub to initialise…`);
-			await new Promise(resolve => setTimeout(resolve, 3000));
+			await new Promise(resolve => setTimeout(resolve, 1000));
 			return true;
 
 		} catch (err: any) {
@@ -849,8 +864,55 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.window.setStatusBarMessage('$(sync~spin) Amypo: Initialising project…', 30000);
 
 		try {
-			console.log(`[Amypo] Cloning: ${authenticatedCloneUrl.replace(GITHUB_TOKEN, '***')}`);
-			await execAsync(`git clone "${authenticatedCloneUrl}" "${projectPath}"`, { cwd: parentPath });
+			const MAX_CLONE_RETRIES = 3;
+			let cloneSuccess = false;
+			let lastCloneError: any = null;
+
+			for (let attempt = 1; attempt <= MAX_CLONE_RETRIES; attempt++) {
+				try {
+					if (attempt > 1) {
+						console.warn(`[Amypo] Retrying clone (attempt ${attempt}/${MAX_CLONE_RETRIES}) after network hiccup...`);
+						vscode.window.setStatusBarMessage(`$(sync~spin) Amypo: Network hiccup, retrying clone (${attempt}/${MAX_CLONE_RETRIES})…`, 15000);
+
+						if (fs.existsSync(projectPath)) {
+							try {
+								await fs.promises.rm(projectPath, { recursive: true, force: true });
+							} catch (rmErr) {
+								console.warn('[Amypo] Error cleaning partial folder before retry:', rmErr);
+							}
+						}
+						// Exponential backoff: 2s on attempt 2, 4s on attempt 3
+						await new Promise(res => setTimeout(res, attempt * 1500));
+					}
+
+					console.log(`[Amypo] Cloning (attempt ${attempt}/${MAX_CLONE_RETRIES}): ${authenticatedCloneUrl.replace(GITHUB_TOKEN, '***')}`);
+
+					// Prefer shallow clone for speed and lower bandwidth; fallback to standard clone on last retry if needed
+					const cloneCmd = attempt < MAX_CLONE_RETRIES
+						? `git clone --depth 1 --single-branch "${authenticatedCloneUrl}" "${projectPath}"`
+						: `git clone "${authenticatedCloneUrl}" "${projectPath}"`;
+
+					await execAsync(cloneCmd, { cwd: parentPath });
+					cloneSuccess = true;
+					break;
+				} catch (cloneErr: any) {
+					lastCloneError = cloneErr;
+					const msg = cloneErr.stderr ?? cloneErr.message ?? '';
+					console.warn(`[Amypo] Clone attempt ${attempt} failed:`, msg);
+
+					if (attempt < MAX_CLONE_RETRIES && fs.existsSync(projectPath)) {
+						try {
+							await fs.promises.rm(projectPath, { recursive: true, force: true });
+						} catch (rmErr) {
+							// ignore
+						}
+					}
+				}
+			}
+
+			if (!cloneSuccess) {
+				throw lastCloneError || new Error('Failed to clone repository after multiple attempts.');
+			}
 
 			if (isTemplate && repoUrl) {
 				const parts = repoUrl.replace('https://github.com/', '').split('/');
@@ -872,7 +934,14 @@ export async function activate(context: vscode.ExtensionContext) {
 					await execAsync(`git push -u "${authenticatedPushUrl}" main`, { cwd: projectPath });
 					console.log('[Amypo] Template pushed to new repo successfully.');
 				} catch (pushErr: any) {
-					console.warn('[Amypo] Initial push failed:', pushErr.stderr ?? pushErr.message);
+					console.warn('[Amypo] Initial push attempt 1 failed, retrying in 2s:', pushErr.stderr ?? pushErr.message);
+					await new Promise(r => setTimeout(r, 2000));
+					try {
+						await execAsync(`git push -u "${authenticatedPushUrl}" main`, { cwd: projectPath });
+						console.log('[Amypo] Template pushed to new repo successfully on retry.');
+					} catch (pushErr2: any) {
+						console.warn('[Amypo] Initial push failed after retry:', pushErr2.stderr ?? pushErr2.message);
+					}
 				}
 
 			} else {
@@ -890,7 +959,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			await context.globalState.update('amypo.token', activeToken);
 			await context.globalState.update('amypo.serverType', server_type);
 			await context.globalState.update('amypo.lastTest', {
-				allocation_id: activeAllocation?.id,
+				allocation_id: activeAllocation?.id ?? activeAllocation?.allocation_id ?? currentAllocationData?.allocation_id,
 				test_type: activeTestType,
 				module_id: activeModuleId
 			});
@@ -910,7 +979,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		} catch (err: any) {
 			console.error('[Amypo] Initialisation error:', err.stderr ?? err.message);
-			vscode.window.showErrorMessage(`Amypo: Setup failed — ${err.stderr ?? err.message ?? 'unknown error'}`);
+			const errMsg = err.stderr ?? err.message ?? 'unknown error';
+			const choice = await vscode.window.showErrorMessage(
+				`Amypo: Setup failed — ${errMsg}`,
+				'Retry Setup'
+			);
+			if (choice === 'Retry Setup') {
+				await cloneAndOpenRepo(repoUrl, testId, langId);
+			}
 		}
 	};
 
@@ -1744,7 +1820,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			console.log('[Amypo EduTech] Course:', course_details?.course_name);
 
-			const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.8';
+			const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.9';
 			const courseInfo = {
 				course_name: course_details?.course_name ?? 'N/A',
 				topic_name: topic_details?.topic_name ?? 'N/A',
@@ -1888,17 +1964,19 @@ export async function activate(context: vscode.ExtensionContext) {
 					console.log('[Amypo] Matched primary language ID:', primaryLanguageId);
 				} catch { /* non-critical */ }
 
-				await cloneAndOpenRepo(repo_url, moduleId, primaryLanguageId);
-
+				// ✅ CRITICAL FIX: Save cachedQuestion and post state BEFORE cloneAndOpenRepo,
+				// so when openFolderWithoutReload switches the workspace (restarting the extension host),
+				// the newly activated extension host IMMEDIATELY has the question data and renders without hanging on "Loading Amypo..."!
 				if (qData) {
 					const currentTimer = Math.max(0, Math.floor((Date.now() - testStartTime) / 1000));
 					const msg = { state: 'loaded', payload: qData, stats: statsObj, aiFeatures: aiDebugerOptimizer, timer: currentTimer };
-					eduViewProvider.postMessage(msg);
-					// Cache the data for immediate restoration after host restart
 					await context.globalState.update('amypo.cachedQuestion', msg);
+					eduViewProvider.postMessage(msg);
 				} else {
 					eduViewProvider.postMessage({ state: 'error', message: 'Failed to retrieve question details.' });
 				}
+
+				await cloneAndOpenRepo(repo_url, moduleId, primaryLanguageId);
 			});
 
 			vscode.commands.executeCommand(`${EduViewProvider.viewType}.focus`);
@@ -2493,14 +2571,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	if (shouldRestore) {
 		console.log('[Amypo] Re-activation detected (testStarted=' + testAlreadyStarted + ', insideProject=' + isInsideAmypoProject + '). Restoring session…');
 
-		// 🍏 macOS: Ensure the restored/reloaded window enters fullscreen
-		if (process.platform === 'darwin') {
-			setTimeout(() => {
-				try {
+		// Ensure the restored/reloaded window enters fullscreen / brings itself to focus
+		setTimeout(() => {
+			try {
+				if (process.platform === 'darwin') {
 					vscode.commands.executeCommand('workbench.action.enterFullScreen');
-				} catch { }
-			}, 1500);
-		}
+				}
+			} catch { }
+		}, 1000);
 
 		// Restore saved data from globalState
 		currentAllocationData = context.globalState.get('amypo.allocationData') ?? null;
@@ -2571,7 +2649,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					console.log('[Amypo] Using cached course info (transition recovery)', savedCourseInfo);
 
 					if (savedCourseInfo) {
-						const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.8';
+						const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.9';
 						eduViewProvider.updateView({ ...savedCourseInfo, shouldRestore: true, version: extVersion }, () => { });
 						eduViewProvider.setOnReady(() => {
 							eduViewProvider.postMessage(cachedMsg);
@@ -2662,7 +2740,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 				const savedCourseInfo = context.globalState.get<any>('amypo.courseInfo');
 				if (savedCourseInfo) {
-					const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.8';
+					const extVersion = vscode.extensions.getExtension('AMYPO.amypo-question')?.packageJSON?.version ?? '1.5.9';
 					eduViewProvider.updateView({ ...savedCourseInfo, shouldRestore: true, version: extVersion, timer: currentTimer }, () => { });
 					eduViewProvider.setOnReady(() => {
 						eduViewProvider.postMessage(questionMessage);
