@@ -99,6 +99,10 @@ npm run compile
 
 # 3. Build the Windows x64 executable package
 npm run gulp vscode-win32-x64
+# used this instead of above in sena lap
+npm run gulp vscode-win32-x64-min
+npm run gulp vscode-win32-x64-user-setup
+npm run gulp vscode-win32-x64-system-setup
 
 # User Installer (.exe)
 yarn gulp vscode-win32-x64-user-setup
